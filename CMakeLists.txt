@@ -22,6 +22,7 @@ install(TARGETS cpu_ops DESTINATION caustics)
 
 if (CAUSTICS_CUDA)
   enable_language(CUDA)
+  include_directories("/usr/local/cuda-11/include")
   include_directories("/usr/local/cuda-11.2/include")
   set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --expt-relaxed-constexpr")
 
