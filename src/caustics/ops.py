@@ -30,9 +30,35 @@ print("gpu_ops:", gpu_ops)
 
 xops = xla_client.ops
 
-
+# This function is just a wrapper around ehrlich_aberth to make it easier to
+# handle arrays with different shapes
 @partial(jit, static_argnames=("itmax", "compensated"))
 def poly_roots(coeffs, itmax=2000, compensated=False):
+    """
+    Computes the roots of a complex polynomial using the Ehrlich-Aberth method.
+    The function wraps a C++ CUDA version of the C code that is available here:
+    https://github.com/trcameron/CompEA . One of two algorithms is used depending
+    on the value of `compensated`. The first is the standard Ehrlich-Aberth
+    method and the second is the Ehrlich-Aberth method with compensated
+    arithmetic (see https://hal.archives-ouvertes.fr/hal-03335604) which computes
+    the roots using double precision but with accuracy as if they were computed
+    in quadruple precision. The compensated EA algorithm is about 2X slower than
+    the regular one and is only necessary for polynomials with very large
+    condition numbers.
+
+    Args:
+        coeffs (array_like): A JAX array of complex polynomial coefficients
+            where the last dimension is stores the coefficients starting from
+            the coefficient of the highest order term.
+        itmax (int, optional): Maximum number of iteration of the root solver.
+            Defaults to 2000.
+        compensated (bool, optional): Use the compensated arithmetic version
+            of the Ehrlich-Aberth algorithm. Defaults to False.
+
+    Returns:
+        array_like: The complex roots of the polynomial. Same shape as `coeffs`
+        except the last dimension is shrunk by one.
+    """
     ncoeffs = coeffs.shape[-1]
     output_shape = coeffs.shape[:-1] + (ncoeffs - 1,)
 
@@ -45,8 +71,7 @@ def poly_roots(coeffs, itmax=2000, compensated=False):
 
 # This function exposes the primitive to user code
 @partial(jit, static_argnames=("itmax", "compensated"))
-def ehrlich_aberth(coeffs, itmax=2000, compensated=False):
-    ncoeffs = coeffs.shape[-1]
+def ehrlich_aberth(coeffs, itmax=None, compensated=None):
     roots = _ehrlich_aberth_prim.bind(
         coeffs,
         itmax=itmax,
@@ -62,6 +87,12 @@ def ehrlich_aberth(coeffs, itmax=2000, compensated=False):
 # For JIT compilation we need a function to evaluate the shape and dtype of the
 # outputs of our op for some given inputs
 def _ehrlich_aberth_abstract(coeffs, **kwargs):
+    """
+    Abstract evaluation of the primitive.
+
+    This function does not need to be JAX traceable. It will be invoked with
+    abstractions of the actual arguments. 
+    """
     ncoeffs = coeffs.shape[-1]
     shape = (coeffs.shape[0] * (ncoeffs - 1),)
     dtype = dtypes.canonicalize_dtype(coeffs.dtype)
@@ -74,6 +105,22 @@ def _ehrlich_aberth_abstract(coeffs, **kwargs):
 def _ehrlich_aberth_translation(
     c, coeffs, itmax=None, compensated=None, platform="cpu"
 ):
+    """
+    The compilation to XLA of the primitive.
+
+    JAX compilation works by compiling each primitive into a graph of XLA 
+    operations.
+
+    This is the biggest hurdle to adding new functionality to JAX, because the
+    set of XLA operations is limited, and JAX already has pre-defined primitives 
+    for most of them. However, XLA includes a CustomCall operation that can be 
+    used to encapsulate arbitrary functionality defined using C++.
+
+    Here we specify the interaction between XLA and the the C++ code implementing
+    the CPU and CUDA versions of the Ehrlich-Aberth algorithm.
+
+    For more details see the tutorial https://github.com/dfm/extending-jax. 
+    """
     # The inputs have "shapes" that provide both the shape and the dtype
     coeffs_shape = c.get_shape(coeffs)
 
@@ -183,6 +230,9 @@ def _ehrlich_aberth_jvp(args, tangents, **kwargs):
     of the variables used by the operation, using the cotangent of the result
     of the operation."
 
+    For more details on implicit differentiation and JAX, see this excellent
+    tutorial: http://implicit-layers-tutorial.org/implicit_functions/.
+
     Args:
         args (tuple): The arguments to the function `ehrlich_aberth`.
         tangents (tuple): Small perturbation to the arguments.
@@ -193,9 +243,6 @@ def _ehrlich_aberth_jvp(args, tangents, **kwargs):
     itmax = kwargs["itmax"]
     compensated = kwargs["compensated"]
 
-    # We have to flip the order of the coefficients because these arguments are
-    # those which were passed to _ehrlich_aberth_prim.bind() in the ehrlich_aberth
-    # function
     p = args[0]
     dp = tangents[0]
 
