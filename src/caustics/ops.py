@@ -91,7 +91,7 @@ def _ehrlich_aberth_abstract(coeffs, **kwargs):
     Abstract evaluation of the primitive.
 
     This function does not need to be JAX traceable. It will be invoked with
-    abstractions of the actual arguments. 
+    abstractions of the actual arguments.
     """
     ncoeffs = coeffs.shape[-1]
     shape = (coeffs.shape[0] * (ncoeffs - 1),)
@@ -108,18 +108,18 @@ def _ehrlich_aberth_translation(
     """
     The compilation to XLA of the primitive.
 
-    JAX compilation works by compiling each primitive into a graph of XLA 
+    JAX compilation works by compiling each primitive into a graph of XLA
     operations.
 
     This is the biggest hurdle to adding new functionality to JAX, because the
-    set of XLA operations is limited, and JAX already has pre-defined primitives 
-    for most of them. However, XLA includes a CustomCall operation that can be 
+    set of XLA operations is limited, and JAX already has pre-defined primitives
+    for most of them. However, XLA includes a CustomCall operation that can be
     used to encapsulate arbitrary functionality defined using C++.
 
     Here we specify the interaction between XLA and the the C++ code implementing
     the CPU and CUDA versions of the Ehrlich-Aberth algorithm.
 
-    For more details see the tutorial https://github.com/dfm/extending-jax. 
+    For more details see the tutorial https://github.com/dfm/extending-jax.
     """
     # The inputs have "shapes" that provide both the shape and the dtype
     coeffs_shape = c.get_shape(coeffs)
@@ -206,7 +206,8 @@ def _ehrlich_aberth_translation(
 # applied, the jvp-transformed function executes a “JVP rule” for that primitive
 # that both evaluates the primitive on the primals and applies the primitive’s
 # JVP at those primal values.
-def _ehrlich_aberth_jvp(args, tangents, **kwargs):
+@partial(jit, static_argnames=("itmax", "compensated"))
+def _ehrlich_aberth_jvp(args, tangents, itmax=None, compensated=None):
     """
     Compute the Jacobian-vector product of the Ehrlich-Aberth complex polynomial
     root solver.
@@ -240,9 +241,6 @@ def _ehrlich_aberth_jvp(args, tangents, **kwargs):
     Returns:
         tuple: (z, dz) where z are the roots and dz is JVP.
     """
-    itmax = kwargs["itmax"]
-    compensated = kwargs["compensated"]
-
     p = args[0]
     dp = tangents[0]
 
