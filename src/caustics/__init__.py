@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-__all__ = ["__version__", "ehrlich_aberth"]
+__all__ = ["__version__", "poly_roots"]
 
 
-from .ops import ehrlich_aberth
+from .ops import poly_roots

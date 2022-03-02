@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-__all__ = ["ehrlich_aberth"]
+__all__ = ["poly_roots"]
 
 from functools import partial
 
@@ -31,18 +31,28 @@ print("gpu_ops:", gpu_ops)
 xops = xla_client.ops
 
 
-# This function exposes the primitive to user code and this is the only
-# public-facing function in this module
-@partial(jit, static_argnames=("itmax"))
+@partial(jit, static_argnames=("itmax", "compensated"))
+def poly_roots(coeffs, itmax=2000, compensated=False):
+    ncoeffs = coeffs.shape[-1]
+    output_shape = coeffs.shape[:-1] + (ncoeffs - 1,)
+
+    # The `ehrlich_aberth` function expects the coefficients to be ordered as
+    # p[0] + p[1] * x + ...
+    coeffs = coeffs.reshape((-1, ncoeffs))[:, ::-1]
+    roots = ehrlich_aberth(coeffs, itmax=itmax, compensated=compensated)
+    return roots.reshape(output_shape)
+
+
+# This function exposes the primitive to user code
+@partial(jit, static_argnames=("itmax", "compensated"))
 def ehrlich_aberth(coeffs, itmax=2000, compensated=False):
-    """Compute complex polynomial roots."""
-    # Reshape to shape (size * (deg + 1),)
-    coeffs = coeffs.reshape(-1, coeffs.shape[-1])
-
-    # The C++ function expects the coefficients to be ordered as p[0] + p[1] * x + ...
-    coeffs = coeffs[:, ::-1]
-
-    return _ehrlich_aberth_prim.bind(coeffs, itmax=itmax)
+    ncoeffs = coeffs.shape[-1]
+    roots = _ehrlich_aberth_prim.bind(
+        coeffs,
+        itmax=itmax,
+        compensated=compensated,
+    )
+    return roots
 
 
 # *********************************
@@ -51,19 +61,18 @@ def ehrlich_aberth(coeffs, itmax=2000, compensated=False):
 
 # For JIT compilation we need a function to evaluate the shape and dtype of the
 # outputs of our op for some given inputs
-def _ehrlich_aberth_abstract(coeffs, itmax=2000, compensated=False):
-    shape = coeffs.shape
-    size = shape[0]  # number of polynomials
-    deg = shape[1] - 1  # degree of polynomials
+def _ehrlich_aberth_abstract(coeffs, **kwargs):
+    ncoeffs = coeffs.shape[-1]
+    shape = (coeffs.shape[0] * (ncoeffs - 1),)
     dtype = dtypes.canonicalize_dtype(coeffs.dtype)
-    return ShapedArray((size * deg,), dtype)
+    return ShapedArray(shape, dtype)
 
 
 # We also need a translation rule to convert the function into an XLA op. In
 # our case this is the custom XLA op that we've written. We're wrapping two
 # translation rules into one here: one for the CPU and one for the GPU
 def _ehrlich_aberth_translation(
-    c, coeffs, itmax=2000, compensated=False, platform="cpu"
+    c, coeffs, itmax=None, compensated=None, platform="cpu"
 ):
     # The inputs have "shapes" that provide both the shape and the dtype
     coeffs_shape = c.get_shape(coeffs)
@@ -168,6 +177,12 @@ def _ehrlich_aberth_jvp(args, tangents, **kwargs):
     of f with respect to each of the coefficients which gets dotted into the
     tangent vector dp.
 
+    We do not need a corresponding VJP rule "because JAX will produce the reverse
+    differentiation computation by processing the JVP computation backwards.
+    For each operation in the tangent computation, it accumulates the cotangents
+    of the variables used by the operation, using the cotangent of the result
+    of the operation."
+
     Args:
         args (tuple): The arguments to the function `ehrlich_aberth`.
         tangents (tuple): Small perturbation to the arguments.
@@ -175,18 +190,24 @@ def _ehrlich_aberth_jvp(args, tangents, **kwargs):
     Returns:
         tuple: (z, dz) where z are the roots and dz is JVP.
     """
+    itmax = kwargs["itmax"]
+    compensated = kwargs["compensated"]
+
+    # We have to flip the order of the coefficients because these arguments are
+    # those which were passed to _ehrlich_aberth_prim.bind() in the ehrlich_aberth
+    # function
     p = args[0]
     dp = tangents[0]
 
     size = p.shape[0]  # number of polynomials
     deg = p.shape[1] - 1  # degree of polynomials
 
-    # We use "bind" here because we don't want to mod the roots again
-    z = _ehrlich_aberth_prim.bind(p)  # shape (size * deg,)
+    # Evaluate the roots (shape (size*deg,))
+    z = _ehrlich_aberth_prim.bind(p, itmax=itmax, compensated=compensated)
     z = z.reshape((size, deg))
 
     # Evaluate the derivative of the polynomials at the roots
-    p_deriv = vmap(jnp.polyder)(p)
+    p_deriv = vmap(lambda x: jnp.polyder(x[::-1]))(p)
     df_dz = vmap(lambda coeffs, root: jnp.polyval(coeffs, root))(p_deriv, z)
 
     def zero_tangent(tan, val):
@@ -194,7 +215,7 @@ def _ehrlich_aberth_jvp(args, tangents, **kwargs):
 
     # The Jacobian of f with respect to coefficient p evaluated at each of the
     # roots. Shape (size, deg, deg + 1).
-    df_dp = vmap(vmap(lambda z: jnp.power(z, jnp.arange(deg + 1)[::-1])))(z)
+    df_dp = vmap(vmap(lambda z: jnp.power(z, jnp.arange(deg + 1))))(z)
 
     # Jacobian of the roots multiplied by the tangents, shape (size, deg)
     dz = (
@@ -214,13 +235,26 @@ def _ehrlich_aberth_jvp(args, tangents, **kwargs):
 # ************************************
 # *  SUPPORT FOR BATCHING WITH VMAP  *
 # ************************************
+def _ehrlich_aberth_batch(args, axes, **kwargs):
+    """
+    Computes the batched version of the primitive. This must be a JAX-traceable
+    function.
 
-# Our op already supports arbitrary dimensions so the batching rule is quite
-# simple. The jax.lax.linalg module includes some example of more complicated
-# batching rules if you need such a thing.
-# def _kepler_batch(args, axes):
-#    assert axes[0] == axes[1]
-#    return ehrlich_aberth(*args), axes
+    Args:
+        args: a tuple of two arguments, each being a tensor of matching
+            shape.
+        axes: the axes that are being batched. See vmap documentation.
+    Returns:
+        a tuple of the result, and the result axis that was batched.
+    """
+    coeffs = args[0]
+    axis = axes[0]
+    ncoeffs = coeffs.shape[-1]
+    output_shape = coeffs.shape[:-1] + (ncoeffs - 1,)
+    coeffs = coeffs.reshape(-1, ncoeffs)
+    res = ehrlich_aberth(coeffs, **kwargs)
+
+    return res.reshape(output_shape), axis
 
 
 # *********************************************
@@ -240,4 +274,4 @@ xla.backend_specific_translations["gpu"][_ehrlich_aberth_prim] = partial(
 
 # Connect the JVP and batching rules
 ad.primitive_jvps[_ehrlich_aberth_prim] = _ehrlich_aberth_jvp
-# batching.primitive_batchers[_ehrlich_aberth_prim] = _kepler_batch
+batching.primitive_batchers[_ehrlich_aberth_prim] = _ehrlich_aberth_batch
