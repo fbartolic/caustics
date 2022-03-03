@@ -1598,6 +1598,42 @@ def critical_and_caustic_curves_triple(a, r3, e1, e2, npts=200):
 
 
 @partial(jit, static_argnames=("root_solver_itmax"))
+def images_point_source_binary(w, a, e1, root_solver_itmax=2500):
+    # Compute complex polynomial coefficients for each element of w
+    coeffs = poly_coeffs_binary(w, a, e1)
+
+    # Compute roots
+    roots = poly_roots(coeffs, itmax=root_solver_itmax)
+    roots = jnp.moveaxis(roots, -1, 0)
+
+    # Evaluate the lens equation at the roots
+    lens_eq_eval = lens_eq_binary(roots, a, e1) - w
+
+    # Mask out roots which don't satisfy the lens equation
+    mask_solutions = jnp.abs(lens_eq_eval) < 1e-10
+
+    return roots, mask_solutions
+
+
+@partial(jit, static_argnames=("root_solver_itmax"))
+def images_point_source_triple(w, a, r3, e1, e2, root_solver_itmax=2500):
+    # Compute complex polynomial coefficients for each element of w
+    coeffs = poly_coeffs_triple(w, a, r3, e1, e2)
+
+    # Compute roots
+    roots = poly_roots(coeffs, itmax=root_solver_itmax)
+    roots = jnp.moveaxis(roots, -1, 0)
+
+    # Evaluate the lens equation at the roots
+    lens_eq_eval = lens_eq_triple(roots, a, r3, e1, e2) - w
+
+    # Mask out roots which don't satisfy the lens equation
+    mask_solutions = jnp.abs(lens_eq_eval) < 1e-10
+
+    return roots, mask_solutions
+
+
+@partial(jit, static_argnames=("root_solver_itmax"))
 def mag_point_source_binary(w, a, e1, root_solver_itmax=2500):
     """
     Compute the magnification of a point source for the binary lens case.
@@ -1615,22 +1651,11 @@ def mag_point_source_binary(w, a, e1, root_solver_itmax=2500):
     Returns:
         array_like: The magnification evaluated at w.
     """
-    # Compute complex polynomial coefficients for each element of w
-    coeffs = poly_coeffs_binary(w, a, e1)
-
-    # Compute roots
-    roots = poly_roots(coeffs, itmax=root_solver_itmax)
-    roots = jnp.moveaxis(roots, -1, 0)
-
-    # Evaluate the lens equation at the roots
-    lens_eq_eval = lens_eq_binary(roots, a, e1) - w
-
-    # Mask out roots which don't satisfy the lens equation
-    mask_solutions = jnp.abs(lens_eq_eval) < 1e-10
-
-    # Compute the magnification
-    det = lens_eq_jac_det_binary(roots, a, e1)
-    mag = (1.0 / jnp.abs(det)) * mask_solutions
+    images, mask = images_point_source_binary(
+        w, a, e1, root_solver_itmax=root_solver_itmax
+    )
+    det = lens_eq_jac_det_binary(images, a, e1)
+    mag = (1.0 / jnp.abs(det)) * mask
 
     return mag.sum(axis=0).reshape(w.shape)
 
@@ -1653,21 +1678,10 @@ def mag_point_source_triple(w, a, r3, e1, e2, root_solver_itmax=2500):
     Returns:
         array_like: The magnification evaluated at w.
     """
-    # Compute complex polynomial coefficients for each element of w
-    coeffs = poly_coeffs_triple(w, a, r3, e1, e2)
-
-    # Compute roots
-    roots = poly_roots(coeffs, itmax=root_solver_itmax)
-    roots = jnp.moveaxis(roots, -1, 0)
-
-    # Evaluate the lens equation at the roots
-    lens_eq_eval = lens_eq_triple(roots, a, r3, e1, e2) - w
-
-    # Mask out roots which don't satisfy the lens equation
-    mask_solutions = jnp.abs(lens_eq_eval) < 1e-10
-
-    # Compute the magnification
-    det = lens_eq_jac_det_triple(roots, a, r3, e1, e2)
-    mag = (1.0 / jnp.abs(det)) * mask_solutions
+    images, mask = images_point_source_triple(
+        w, a, r3, e1, e2, root_solver_itmax=root_solver_itmax
+    )
+    det = lens_eq_jac_det_triple(images, a, r3, e1, e2)
+    mag = (1.0 / jnp.abs(det)) * mask
 
     return mag.sum(axis=0).reshape(w.shape)
