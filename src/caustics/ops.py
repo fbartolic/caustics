@@ -26,7 +26,6 @@ except ImportError:
 else:
     for _name, _value in gpu_ops.registrations().items():
         xla_client.register_custom_call_target(_name, _value, platform="gpu")
-print("gpu_ops:", gpu_ops)
 
 xops = xla_client.ops
 
