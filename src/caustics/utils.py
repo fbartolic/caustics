@@ -4,6 +4,7 @@ __all__ = [
     "min_zero_avoiding",
     "max_zero_avoiding",
     "ang_dist",
+    "ang_dist_diff",
     "add_angles",
     "sub_angles",
 ]
@@ -35,15 +36,6 @@ def max_zero_avoiding(x):
     return jnp.where(cond, -min_zero_avoiding(jnp.abs(x)), max_x)
 
 
-@jit
-def ang_dist(theta1, theta2):
-    """
-    Smallest separation between two angles.
-    """
-    diff1 = (theta1 - theta2) % (2 * jnp.pi)
-    diff2 = (theta2 - theta1) % (2 * jnp.pi)
-    return jnp.min(jnp.array([diff1, diff2]), axis=0)
-
 
 @jit
 def ang_dist_diff(theta):
@@ -70,3 +62,11 @@ def sub_angles(a, b):
     cos_amb = jnp.cos(a) * jnp.cos(b) + jnp.sin(a) * jnp.sin(b)
     sin_amb = jnp.sin(a) * jnp.cos(b) - jnp.cos(a) * jnp.sin(b)
     return jnp.arctan2(sin_amb, cos_amb)
+
+@jit
+def ang_dist(theta1, theta2):
+    """
+    Smallest separation between two angles.
+    """
+    return jnp.abs(sub_angles(theta1, theta2))
+

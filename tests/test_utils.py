@@ -6,7 +6,7 @@ import pytest
 import jax.numpy as jnp
 from jax.config import config
 
-from caustics import (
+from caustics.utils import (
     min_zero_avoiding,
     max_zero_avoiding,
     ang_dist,
@@ -37,8 +37,6 @@ def test_ang_dist():
     t2 = jnp.deg2rad(170.0)
     np.testing.assert_allclose(ang_dist(t1, t2), jnp.deg2rad(20.0))
 
-
-def test_ang_dist_diff():
     theta = jnp.deg2rad(jnp.array([-5.0, -2.0, 2.0]))
     np.testing.assert_allclose(
         ang_dist_diff(theta), jnp.deg2rad(jnp.array([3.0, 4.0, 7.0]))

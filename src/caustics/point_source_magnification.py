@@ -1,10 +1,14 @@
 # -*- coding: utf-8 -*-
 
 __all__ = [
+    "images_point_source_binary",
+    "images_point_source_triple",
     "mag_point_source_binary",
     "mag_point_source_triple",
     "critical_and_caustic_curves_binary",
     "critical_and_caustic_curves_triple",
+    "lens_eq_binary",
+    "lens_eq_triple",
 ]
 
 from functools import partial
@@ -13,7 +17,7 @@ import numpy as np
 import jax.numpy as jnp
 from jax import jit
 
-from . import poly_roots
+from .ops import poly_roots
 
 
 @jit
