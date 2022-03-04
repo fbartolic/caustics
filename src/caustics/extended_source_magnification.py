@@ -151,9 +151,7 @@ def bboxes_near_overlap_neg_dir(bbox_c, bbox_l):
 
 @jit
 def get_closest_bbox_pos_dir(bbox, bboxes):
-    rmin, rmax, tmin, tmax = bbox
-    rmean = rmin + 0.5 * (rmax - rmin)
-
+    rmean = bbox[0] + 0.5 * (bbox[1] - bbox[0])
     x_edge, y_edge = rmean * jnp.cos(bbox[3]), rmean * jnp.sin(bbox[3])
 
     def get_dist(bbox_other):
@@ -169,9 +167,7 @@ def get_closest_bbox_pos_dir(bbox, bboxes):
 
 @jit
 def get_closest_bbox_neg_dir(bbox, bboxes):
-    rmin, rmax, tmin, tmax = bbox
-    rmean = rmin + 0.5 * (rmax - rmin)
-
+    rmean = bbox[0] + 0.5 * (bbox[1] - bbox[0])
     x_edge, y_edge = rmean * jnp.cos(bbox[2]), rmean * jnp.sin(bbox[2])
 
     def get_dist(bbox_other):
@@ -205,7 +201,6 @@ def extend_bboxes_polar(bboxes, f_r=0.2, f_theta=0.05):
     """
     # Sort bboxes based on the inner theta edge
     bboxes = bboxes[jnp.argsort(bboxes[:, 2])]
-    size = len(bboxes)
 
     for c, bbox in enumerate(bboxes):
         # Get shape of the central bbox
@@ -232,8 +227,8 @@ def extend_bboxes_polar(bboxes, f_r=0.2, f_theta=0.05):
                 cond_pos,
                 jnp.array(
                     [
-                        bboxes[c, 0] - f_r * rwidth,
-                        bboxes[c, 1] + f_r * rwidth,
+                        bbox[0] - f_r * rwidth,
+                        bbox[1] + f_r * rwidth,
                         sub_angles(bbox[2], f_theta * theta_width),
                         bbox_adjacent_pos[2],
                     ]
