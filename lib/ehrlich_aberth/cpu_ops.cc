@@ -20,10 +20,10 @@ namespace
         *reinterpret_cast<const int *>(in[0]);                       // number of polynomials (size of problem)
     const int deg = *reinterpret_cast<const int *>(in[1]);           // degree of polynomials
     const int itmax = *reinterpret_cast<const int *>(in[2]);         // maxiter
-    const bool compensated = *reinterpret_cast<const bool *>(in[3]); // maxiter
+    const bool compensated = *reinterpret_cast<const bool *>(in[3]); // maxiterk
 
     // Flattened polynomial coefficients, shape (deg + 1)*size
-    const complex *coeffs = reinterpret_cast<const complex *>(in[2]);
+    const complex *coeffs = reinterpret_cast<const complex *>(in[4]);
 
     // Output roots, shape deg*size
     complex *roots = reinterpret_cast<complex *>(out);
