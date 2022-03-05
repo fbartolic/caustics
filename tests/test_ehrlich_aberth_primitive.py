@@ -8,7 +8,7 @@ import jax.numpy as jnp
 from jax.config import config
 from jax.test_util import check_grads
 
-from caustics.ops import poly_roots
+from caustics.ehrlich_aberth_primitive import poly_roots
 from caustics.point_source_magnification import poly_coeffs_binary
 
 

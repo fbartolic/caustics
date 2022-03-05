@@ -36,7 +36,8 @@ class CMakeBuildExt(build_ext):
             )
             if not os.path.exists(cmake_python_library):
                 cmake_python_library = "{}/libs/python{}.lib".format(
-                    sys.base_prefix, distutils.sysconfig.get_config_var("VERSION"),
+                    sys.base_prefix,
+                    distutils.sysconfig.get_config_var("VERSION"),
                 )
         else:
             cmake_python_library = "{}/{}".format(
@@ -54,13 +55,12 @@ class CMakeBuildExt(build_ext):
             "-DPython_INCLUDE_DIRS={}".format(cmake_python_include_dir),
             "-DCMAKE_BUILD_TYPE={}".format("Debug" if self.debug else "Release"),
             "-DCMAKE_PREFIX_PATH={}".format(pybind11.get_cmake_dir()),
-#            "-DCMAKE_CXX_COMPILER=g++",
+            #            "-DCMAKE_CXX_COMPILER=g++",
         ]
         if os.environ.get("CAUSTICS_CUDA", "no").lower() == "yes":
             cmake_args.append("-DCAUSTICS_CUDA=yes")
             cmake_args.append("-DCUDA_COMPILER=/usr/local/cuda-11.2/bin/nvcc")
-#            cmake_args.append("-DCUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda-11.2")
-
+        #            cmake_args.append("-DCUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda-11.2")
 
         os.makedirs(self.build_temp, exist_ok=True)
         subprocess.check_call(["cmake", HERE] + cmake_args, cwd=self.build_temp)
@@ -70,30 +70,39 @@ class CMakeBuildExt(build_ext):
 
         # Finally run install
         subprocess.check_call(
-            ["cmake", "--build", ".", "--target", "install"], cwd=self.build_temp,
+            ["cmake", "--build", ".", "--target", "install"],
+            cwd=self.build_temp,
         )
 
     def build_extension(self, ext):
         target_name = ext.name.split(".")[-1]
         subprocess.check_call(
-            ["cmake", "--build", ".", "--target", target_name], cwd=self.build_temp,
+            ["cmake", "--build", ".", "--target", target_name],
+            cwd=self.build_temp,
         )
 
 
 extensions = [
-    Extension("caustics.cpu_ops", ["src/caustics/src/cpu_ops.cc"],),
+    Extension(
+        "caustics.ehrlich_aberth_cpu_op",
+        ["src/caustics/src/ehrlich_aberth_cpu_op.cc"],
+    ),
+    Extension(
+        "caustics.integrate_image_cpu_op",
+        ["src/caustics/src/integrate_image_cpu_op.cc"],
+    ),
 ]
 
 if os.environ.get("CAUSTICS_CUDA", "no").lower() == "yes":
-   extensions.append(
-       Extension(
-           "caustics.gpu_ops",
-           [
-               "src/caustics/src/gpu_ops.cc",
-               "src/caustics/src/cuda_kernels.cc.cu",
-           ],
-       )
-   )
+    extensions.append(
+        Extension(
+            "caustics.ehrlich_aberth_gpu_op",
+            [
+                "src/caustics/src/ehrlich_aberth_gpu_op.cc",
+                "src/caustics/src/ehrlich_aberth_cuda_kernels.cc.cu",
+            ],
+        )
+    )
 
 setup(
     name="caustics",
@@ -101,9 +110,7 @@ setup(
     author_email="fb90@st-andrews.ac.uk",
     url="https://github.com/fbartolic/extending-jax",
     license="MIT",
-    description=(
-        "Differentiable microlensing with JAX."
-    ),
+    description=("Differentiable microlensing with JAX."),
     long_description=read("README.md"),
     long_description_content_type="text/markdown",
     packages=find_packages("src"),

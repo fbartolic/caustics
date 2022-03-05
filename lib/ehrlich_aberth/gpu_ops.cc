@@ -18,7 +18,7 @@ namespace
     return dict;
   }
 
-  PYBIND11_MODULE(gpu_ops, m)
+  PYBIND11_MODULE(ehrlich_aberth_gpu_op, m)
   {
     m.def("registrations", &Registrations);
     m.def("build_ehrlich_aberth_descriptor", [](int size, int deg, int itmax, bool compensated)

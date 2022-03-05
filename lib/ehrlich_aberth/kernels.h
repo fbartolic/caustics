@@ -1,5 +1,5 @@
-#ifndef _EHRLICH_ABERT_JAX_KERNELS_H_
-#define _EHRLICH_ABERT_JAX_KERNELS_H_
+#ifndef _EHRLICH_ABERTH_JAX_KERNELS_H_
+#define _EHRLICH_ABERTH_JAX_KERNELS_H_
 
 #include <cuda_runtime_api.h>
 

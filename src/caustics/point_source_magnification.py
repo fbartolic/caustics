@@ -17,7 +17,7 @@ import numpy as np
 import jax.numpy as jnp
 from jax import jit
 
-from .ops import poly_roots
+from .ehrlich_aberth_primitive import poly_roots
 
 
 @jit

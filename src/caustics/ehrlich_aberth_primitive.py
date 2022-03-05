@@ -13,18 +13,18 @@ from jax.abstract_arrays import ShapedArray
 import jax.numpy as jnp
 
 # Register the CPU XLA custom calls
-from . import cpu_ops
+from . import ehrlich_aberth_cpu_op
 
-for _name, _value in cpu_ops.registrations().items():
+for _name, _value in ehrlich_aberth_cpu_op.registrations().items():
     xla_client.register_cpu_custom_call_target(_name, _value)
 
 # If the GPU version exists, also register those
 try:
-    from . import gpu_ops
+    from . import ehrlich_aberth_gpu_op
 except ImportError:
-    gpu_ops = None
+    ehrlich_aberth_gpu_op = None
 else:
-    for _name, _value in gpu_ops.registrations().items():
+    for _name, _value in ehrlich_aberth_gpu_op.registrations().items():
         xla_client.register_custom_call_target(_name, _value, platform="gpu")
 
 xops = xla_client.ops
@@ -177,14 +177,16 @@ def _ehrlich_aberth_translation(
         )
 
     elif platform == "gpu":
-        if gpu_ops is None:
+        if ehrlich_aberth_gpu_op is None:
             raise ValueError(
                 "The 'ehrlich_aberth_jax' module was not compiled with CUDA support"
             )
 
         # On the GPU, we do things a little differently and encapsulate the
         # dimension using the 'opaque' parameter
-        opaque = gpu_ops.build_ehrlich_aberth_descriptor(size, deg, itmax, compensated)
+        opaque = ehrlich_aberth_gpu_op.build_ehrlich_aberth_descriptor(
+            size, deg, itmax, compensated
+        )
 
         return xops.CustomCallWithLayout(
             c,

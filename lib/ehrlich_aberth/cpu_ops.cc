@@ -68,6 +68,6 @@ namespace
     return dict;
   }
 
-  PYBIND11_MODULE(cpu_ops, m) { m.def("registrations", &Registrations); }
+  PYBIND11_MODULE(ehrlich_aberth_cpu_op, m) { m.def("registrations", &Registrations); }
 
 } // namespace
