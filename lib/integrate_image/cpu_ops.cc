@@ -64,8 +64,8 @@ namespace
     {
       for (int j = 0; j < ntheta; j++)
       {
-        double r = rmin + i * dr;
-        double theta = theta_min + j * dtheta;
+        double r = rmin + i * dr + 0.5 * dr;
+        double theta = theta_min + j * dtheta + 0.5 * dtheta;
 
         complex w = lens_eq_binary(r * thrust::exp(complex(0, theta)), a, e1);
 
@@ -75,7 +75,7 @@ namespace
         double rs = std::sqrt(xs * xs + ys * ys);
         if (rs < rho)
         {
-          integrand[i][j] = linear_limbdark(rs, 1.0, a1);
+          integrand[i][j] = r * linear_limbdark(rs, 1.0, a1);
         }
         else
         {
@@ -84,33 +84,27 @@ namespace
       }
     }
 
-    // Compute the integral using trapezoidal rule
+    // Compute the integral using the midpoint rule
     double *integral_r = new double[ntheta];
 
     // Integrate over r
     for (int j = 0; j < ntheta; j++)
     {
-      // Trapezoidal rule
       double sum = 0.0;
-      for (int i = 1; i < nr - 1; i++)
+      for (int i = 0; i < nr; i++)
       {
-        double r = rmin + i * dr;
-        sum += 2. * r * integrand[i][j];
+        sum += integrand[i][j];
       }
-      double r0 = rmin;
-      double rN = rmin + (nr - 1) * dr;
-      sum += rmin * integrand[0][j] + rN * integrand[nr - 1][j];
-      integral_r[j] = 0.5 * dr * sum;
+      integral_r[j] = dr * sum;
     }
 
     // Integrate over theta
     double sum = 0.0;
-    for (int i = 1; i < ntheta - 1; i++)
+    for (int i = 0; i < ntheta; i++)
     {
-      sum += 2. * integral_r[i];
+      sum += integral_r[i];
     }
-    sum += integral_r[0] + integral_r[ntheta - 1];
-    sum *= 0.5 * dtheta;
+    sum *= dtheta;
 
     // Store the result
     *result = sum;
