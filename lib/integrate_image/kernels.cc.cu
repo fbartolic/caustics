@@ -114,54 +114,64 @@ namespace integrate_polar
       cudaMemcpy(&nr_h, nr, sizeof(int), cudaMemcpyDeviceToHost);
       cudaMemcpy(&ntheta_h, ntheta, sizeof(int), cudaMemcpyDeviceToHost);
 
-      int N = nr_h * ntheta_h;
+      // if nr_h or ntheta_h is zero, return 0
+      if (nr_h == 0 || ntheta_h == 0)
+      {
+        double res = 0.0;
+        cudaMemcpy(result, &res, sizeof(double), cudaMemcpyHostToDevice);
+      }
+      else
+      {
 
-      // Preallocate memory for temporary arrays used within the kernel
-      double *integrand;
-      // integrand is a row-major matrix of size nr * ntheta
-      ThrowIfError(cudaMalloc(&integrand, N * sizeof(double)));
+        int N = nr_h * ntheta_h;
 
-      const int block_dim = 512;
-      const int grid_dim = std::min<int>(1024, (N + block_dim - 1) / block_dim);
+        // Preallocate memory for temporary arrays used within the kernel
+        double *integrand;
+        // integrand is a row-major matrix of size nr * ntheta
+        ThrowIfError(cudaMalloc(&integrand, N * sizeof(double)));
 
-      evaluate_integrand<<<grid_dim, block_dim, 0, stream>>>(rmin, theta_min, dr, dtheta, nr, ntheta, rho, a1, a, e1,
-                                                             source_center, integrand);
+        const int block_dim = 512;
+        const int grid_dim = std::min<int>(1024, (N + block_dim - 1) / block_dim);
 
-      // Sum the columns of integrand matrix, adapted from:
-      // https://stackoverflow.com/questions/34093054/cuda-thrust-how-to-sum-the-columns-of-an-interleaved-array
-      int C = ntheta_h; // number of columns
-      int R = nr_h;     // number of rows
-      thrust::device_vector<double> array(integrand, integrand + N);
+        evaluate_integrand<<<grid_dim, block_dim, 0, stream>>>(rmin, theta_min, dr, dtheta, nr, ntheta, rho, a1, a, e1,
+                                                               source_center, integrand);
 
-      // allocate storage for column sums and indices
-      thrust::device_vector<double> col_sums(C);
-      thrust::device_vector<int> col_indices(C);
+        // Sum the columns of integrand matrix, adapted from:
+        // https://stackoverflow.com/questions/34093054/cuda-thrust-how-to-sum-the-columns-of-an-interleaved-array
+        int C = ntheta_h; // number of columns
+        int R = nr_h;     // number of rows
+        thrust::device_vector<double> array(integrand, integrand + N);
 
-      thrust::device_vector<double> fcol_sums(C);
-      thrust::sequence(fcol_sums.begin(), fcol_sums.end()); // start with column index
-      thrust::transform(fcol_sums.begin(), fcol_sums.end(), fcol_sums.begin(), sum_functor(R, C, thrust::raw_pointer_cast(array.data())));
-      double sum = thrust::reduce(fcol_sums.begin(), fcol_sums.end(), (double)0, thrust::plus<double>());
-      cudaDeviceSynchronize();
+        // allocate storage for column sums and indices
+        thrust::device_vector<double> col_sums(C);
+        thrust::device_vector<int> col_indices(C);
 
-      // Copy nr_d and ntheta_d to host
-      // TODO: avoid doing this by directing the output of thrust::reduce from above
-      // to device memory directly
-      double dr_h, dtheta_h;
-      cudaMemcpy(&dr_h, dr, sizeof(double), cudaMemcpyDeviceToHost);
-      cudaMemcpy(&dtheta_h, dtheta, sizeof(double), cudaMemcpyDeviceToHost);
+        thrust::device_vector<double> fcol_sums(C);
+        thrust::sequence(fcol_sums.begin(), fcol_sums.end()); // start with column index
+        thrust::transform(fcol_sums.begin(), fcol_sums.end(), fcol_sums.begin(), sum_functor(R, C, thrust::raw_pointer_cast(array.data())));
+        double sum = thrust::reduce(fcol_sums.begin(), fcol_sums.end(), (double)0, thrust::plus<double>());
+        cudaDeviceSynchronize();
 
-      // Assign to result
-      double res = sum * dr_h * dtheta_h;
-      cudaMemcpy(result, &res, sizeof(double), cudaMemcpyHostToDevice);
+        // Copy nr_d and ntheta_d to host
+        // TODO: avoid doing this by directing the output of thrust::reduce from above
+        // to device memory directly
+        double dr_h, dtheta_h;
+        cudaMemcpy(&dr_h, dr, sizeof(double), cudaMemcpyDeviceToHost);
+        cudaMemcpy(&dtheta_h, dtheta, sizeof(double), cudaMemcpyDeviceToHost);
 
-      // Free memory
-      cudaFree(integrand);
+        // Assign to result
+        double res = sum * dr_h * dtheta_h;
+        cudaMemcpy(result, &res, sizeof(double), cudaMemcpyHostToDevice);
 
-      cudaError_t cudaerr = cudaDeviceSynchronize();
-      if (cudaerr != cudaSuccess)
-        printf("kernel launch failed with error \"%s\".\n", cudaGetErrorString(cudaerr));
+        // Free memory
+        cudaFree(integrand);
 
-      ThrowIfError(cudaGetLastError());
+        cudaError_t cudaerr = cudaDeviceSynchronize();
+        if (cudaerr != cudaSuccess)
+          printf("kernel launch failed with error \"%s\".\n", cudaGetErrorString(cudaerr));
+
+        ThrowIfError(cudaGetLastError());
+      }
     }
 
   } // namespace
