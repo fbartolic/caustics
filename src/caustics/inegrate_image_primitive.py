@@ -20,11 +20,11 @@ for _name, _value in integrate_image_cpu_op.registrations().items():
 
 # If the GPU version exists, also register those
 try:
-    from . import gpu_ops_integrate_image
+    from . import integrate_image_gpu_op
 except ImportError:
-    gpu_ops = None
+    integrate_image_gpu_op = None
 else:
-    for _name, _value in gpu_ops_integrate_image.registrations().items():
+    for _name, _value in integrate_image_gpu_op.registrations().items():
         xla_client.register_custom_call_target(_name, _value, platform="gpu")
 
 xops = xla_client.ops
@@ -132,24 +132,49 @@ def _integrate_image_translation(
             ),
         )
 
-    #    elif platform == "gpu":
-    #        if gpu_ops is None:
-    #            raise ValueError(
-    #                "The 'integrate_image_jax' module was not compiled with CUDA support"
-    #            )
-    #
-    #        # On the GPU, we do things a little differently and encapsulate the
-    #        # dimension using the 'opaque' parameter
-    #        opaque = gpu_ops.build_integrate_image_descriptor(size, deg, itmax, compensated)
-    #
-    #        return xops.CustomCallWithLayout(
-    #            c,
-    #            op_name,
-    #            operands=(coeffs,),
-    #            operand_shapes_with_layout=(shape_input,),
-    #            shape_with_layout=shape_output,
-    #            opaque=opaque,
-    #        )
+    elif platform == "gpu":
+        if integrate_image_gpu_op is None:
+            raise ValueError(
+                "The 'integrate_image' module was not compiled with CUDA support"
+            )
+
+        # opaque = integrate_image_gpu_op.build_integrate_image_descriptor(0)
+
+        return xops.CustomCallWithLayout(
+            c,
+            op_name,
+            operands=(
+                rmin,
+                theta_min,
+                dr,
+                dtheta,
+                nr,
+                ntheta,
+                rho,
+                a1,
+                a,
+                e1,
+                source_center,
+            ),
+            operand_shapes_with_layout=(
+                xla_client.Shape.array_shape(np.dtype(np.float64), (), ()),
+                xla_client.Shape.array_shape(np.dtype(np.float64), (), ()),
+                xla_client.Shape.array_shape(np.dtype(np.float64), (), ()),
+                xla_client.Shape.array_shape(np.dtype(np.float64), (), ()),
+                xla_client.Shape.array_shape(np.dtype(np.int64), (), ()),
+                xla_client.Shape.array_shape(np.dtype(np.int64), (), ()),
+                xla_client.Shape.array_shape(np.dtype(np.float64), (), ()),
+                xla_client.Shape.array_shape(np.dtype(np.float64), (), ()),
+                xla_client.Shape.array_shape(np.dtype(np.float64), (), ()),
+                xla_client.Shape.array_shape(np.dtype(np.float64), (), ()),
+                xla_client.Shape.array_shape(np.dtype(np.complex128), (), ()),
+            ),
+            # The output shapes:
+            shape_with_layout=xla_client.Shape.array_shape(
+                np.dtype(np.float64), (), ()
+            ),
+            opaque=b"",
+        )
 
     raise ValueError("Unsupported platform; this must be either 'cpu' or 'gpu'")
 
@@ -204,9 +229,9 @@ _integrate_image_prim.def_abstract_eval(_integrate_image_abstract)
 xla.backend_specific_translations["cpu"][_integrate_image_prim] = partial(
     _integrate_image_translation, platform="cpu"
 )
-# xla.backend_specific_translations["gpu"][_integrate_image_prim] = partial(
-#    _integrate_image_translation, platform="gpu"
-# )
+xla.backend_specific_translations["gpu"][_integrate_image_prim] = partial(
+    _integrate_image_translation, platform="gpu"
+)
 
 # Connect the JVP and batching rules
 # ad.primitive_jvps[_integrate_image_prim] = _integrate_image_jvp

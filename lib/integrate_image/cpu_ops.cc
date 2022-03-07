@@ -65,7 +65,7 @@ namespace
       for (int j = 0; j < ntheta; j++)
       {
         double r = rmin + i * dr + 0.5 * dr;
-        double theta = theta_min + j * dtheta + 0.5 * dtheta;
+        double theta = add_angles(theta_min, j * dtheta + 0.5 * dtheta);
 
         complex w = lens_eq_binary(r * thrust::exp(complex(0, theta)), a, e1);
 

@@ -6,26 +6,18 @@
 #include <cstddef>
 #include <cstdint>
 
+#include <thrust/complex.h>
+
 using complex = thrust::complex<double>;
 
 namespace integrate_polar
 {
-  struct IntegratePolarDescriptor
-  {
-    double rmin;
-    double theta_min;
-    double dr;
-    double dtheta;
-    int nr;
-    int ntheta;
-    double rho;
-    double a1;
-    double a;
-    double e1;
-    complex source_center;
-  };
+  //  struct IntegrateImageDescriptor
+  //  {
+  //    int dummy;
+  //  };
 
-  void gpu_integrate_polar(cudaStream_t stream, void **buffers, const char *opaque,
+  void gpu_integrate_image(cudaStream_t stream, void **buffers, const char *opaque,
                            std::size_t opaque_len);
 
 } // namespace integrate_polar

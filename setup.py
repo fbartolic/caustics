@@ -103,6 +103,15 @@ if os.environ.get("CAUSTICS_CUDA", "no").lower() == "yes":
             ],
         )
     )
+    extensions.append(
+        Extension(
+            "caustics.integrate_image_gpu_op",
+            [
+                "src/caustics/src/integrate_image_gpu_op.cc",
+                "src/caustics/src/integrate_image_cuda_kernels.cc.cu",
+            ],
+        )
+    )
 
 setup(
     name="caustics",

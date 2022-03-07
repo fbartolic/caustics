@@ -14,25 +14,14 @@ namespace
   pybind11::dict Registrations()
   {
     pybind11::dict dict;
-    dict["gpu_integrate_polar"] = EncapsulateFunction(gpu_integrate_polar);
+    dict["gpu_integrate_image"] = EncapsulateFunction(gpu_integrate_image);
     return dict;
   }
 
-  PYBIND11_MODULE(gpu_ops, m)
+  PYBIND11_MODULE(integrate_image_gpu_op, m)
   {
     m.def("registrations", &Registrations);
-    m.def("build_integrate_polar_descriptor", [](
-                                                  double rmin,
-                                                  double theta_min,
-                                                  double dr,
-                                                  double dtheta,
-                                                  int nr,
-                                                  int ntheta,
-                                                  double rho,
-                                                  double a1,
-                                                  double a,
-                                                  double e1,
-                                                  complex source_center)
-          { return PackDescriptor(IntegratePolarDescriptor{rmin, theta_min, dr, dtheta, nr, ntheta, rho, a1, a, e1, source_center}); });
+    //    m.def("build_integrate_image_descriptor", [](int dummy)
+    //          { return PackDescriptor(IntegrateImageDescriptor{nr, ntheta}); });
   }
 } // namespace
