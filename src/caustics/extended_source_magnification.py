@@ -7,7 +7,7 @@ from functools import partial
 
 import numpy as np
 import jax.numpy as jnp
-from jax import jit, vmap
+from jax import jit, vmap, lax
 
 from . import (
     lens_eq_binary,
@@ -16,6 +16,7 @@ from . import (
     images_point_source_triple,
     mag_point_source_binary,
     mag_point_source_triple,
+    integrate_image,
 )
 from .utils import *
 
@@ -124,201 +125,147 @@ def get_bbox_polar(r, theta):
 
 
 @jit
-def bboxes_near_overlap_pos_dir(bbox_c, bbox_r):
+def merge_polar_intervals(a, b):
     """
-    True if positive (CCW direction) theta edge of `bbox_c` is nearly adjacent to
-    the negative edge of `bbox_r`.
+    Given two angular intervals (a[0], a[1]) and (b[0], b[1]) in range[-pi, pi),
+    where each interval is defined in the CCW direction, merge them into one.
+
+    Args:
+        a (array_like): Beginning and end of the first interval in range[-pi, pi).
+        b (array_like): Beginning and end of the second interval in range[-pi, pi).
+
+    Returns:
+        array_like: The merged interval.
     """
-    wc = bbox_c[1] - bbox_c[0]
-    wr = bbox_r[1] - bbox_r[0]
-    cond_r = jnp.abs(bbox_c[0] - bbox_r[0]) < 1.2 * jnp.max(jnp.array([wc, wr]))
-    cond_theta = ang_dist(bbox_c[3], bbox_r[2]) < jnp.deg2rad(5.0)
-    return jnp.where(cond_r * cond_theta, True, False)
+    # 4 possible cases: a containss b, b contains a, a and b overlap such that
+    # a is the first interval (CCW direction from -pi) or a and b overlap such
+    # that b is the first interval
+    wa = ang_dist(a[0], a[1])
+    wb = ang_dist(b[0], b[1])
+
+    # A inside B
+    a_inside_b = jnp.logical_and(
+        jnp.logical_and(sub_angles(b[1], a[1]) > 0.0, sub_angles(a[0], b[0]) > 0.0),
+        wb > wa,
+    )
+    b_inside_a = jnp.logical_and(
+        jnp.logical_and(sub_angles(a[1], b[1]) > 0.0, sub_angles(b[0], a[0]) > 0.0),
+        wa > wb,
+    )
+    neither = jnp.logical_not(jnp.logical_or(a_inside_b, b_inside_a))
+
+    a_comes_first = jnp.logical_and(
+        neither, ang_dist(a[1], b[0]) < ang_dist(b[1], a[0])
+    )
+    b_comes_first = jnp.logical_and(neither, jnp.logical_not(a_comes_first))
+
+    def fn_a_comes_first():
+        return jnp.array([a[0], b[1]])
+
+    def fn_b_comes_first():
+        return jnp.array([b[0], a[1]])
+
+    index = jnp.nonzero(
+        jnp.array([a_inside_b, b_inside_a, a_comes_first, b_comes_first]), size=1
+    )[0][0]
+
+    return lax.switch(index, [lambda: b, lambda: a, fn_a_comes_first, fn_b_comes_first])
 
 
 @jit
-def bboxes_near_overlap_neg_dir(bbox_c, bbox_l):
+def merge_two_bboxes(bbox_a, bbox_b):
     """
-    True if negative (CW direction) theta edge of `bbox_c` is nearly adjacent to
-    the positive edge of `bbox_l`.
+    Given two overlapping bounding boxes, merge them into a single bounding box.
     """
-    wc = bbox_c[1] - bbox_c[0]
-    wl = bbox_l[1] - bbox_l[0]
-    cond_r = jnp.abs(bbox_c[0] - bbox_l[0]) < 1.2 * jnp.max(jnp.array([wc, wl]))
-    cond_theta = ang_dist(bbox_l[3], bbox_c[2]) < jnp.deg2rad(5.0)
-    return jnp.where(cond_r * cond_theta, True, False)
+    rmin = min_zero_avoiding(jnp.array([bbox_a[0], bbox_b[0]]))
+    rmax = max_zero_avoiding(jnp.array([bbox_a[1], bbox_b[1]]))
+    return jnp.concatenate(
+        [jnp.array([rmin, rmax]), merge_polar_intervals(bbox_a[2:], bbox_b[2:])]
+    )
 
 
 @jit
-def get_closest_bbox_pos_dir(bbox, bboxes):
-    rmean = bbox[0] + 0.5 * (bbox[1] - bbox[0])
-    x_edge, y_edge = rmean * jnp.cos(bbox[3]), rmean * jnp.sin(bbox[3])
-
-    def get_dist(bbox_other):
-        rmean_other = bbox_other[0] + 0.5 * (bbox_other[1] - bbox_other[0])
-        x_edge_other, y_edge_other = rmean_other * jnp.cos(
-            bbox_other[2]
-        ), rmean * jnp.sin(bbox_other[2])
-        return jnp.sqrt((x_edge_other - x_edge) ** 2 + (y_edge_other - y_edge) ** 2)
-
-    distances = vmap(get_dist)(bboxes)
-    return bboxes[jnp.argsort(distances)][0]
+def extend_bbox(bbox, f_r, f_theta):
+    """
+    Extend the bounding box by a factor of f_r*(rmax - rmin) in the +/- r
+    directions and a factor of f_theta*ang_dist(thetamin, thetamax) in the +/-
+    theta directions.
+    """
+    theta_width = ang_dist(bbox[2], bbox[3])
+    rwidth = bbox[1] - bbox[0]
+    return jnp.array(
+        [
+            bbox[0] - f_r * rwidth,
+            bbox[1] + f_r * rwidth,
+            sub_angles(bbox[2], f_theta * theta_width),
+            add_angles(bbox[3], f_theta * theta_width),
+        ]
+    )
 
 
 @jit
-def get_closest_bbox_neg_dir(bbox, bboxes):
-    rmean = bbox[0] + 0.5 * (bbox[1] - bbox[0])
-    x_edge, y_edge = rmean * jnp.cos(bbox[2]), rmean * jnp.sin(bbox[2])
+def bboxes_near_overlap(bbox_a, bbox_b):
+    """True if `bbox_a` and `bbox_b` overlap or nearly overlap."""
+    delta_r_a = bbox_a[1] - bbox_a[0]
+    delta_r_b = bbox_b[1] - bbox_b[0]
 
-    def get_dist(bbox_other):
-        rmean_other = bbox_other[0] + 0.5 * (bbox_other[1] - bbox_other[0])
-        x_edge_other, y_edge_other = rmean_other * jnp.cos(
-            bbox_other[3]
-        ), rmean * jnp.sin(bbox_other[3])
-        return jnp.sqrt((x_edge_other - x_edge) ** 2 + (y_edge_other - y_edge) ** 2)
+    delta_theta_a = ang_dist(bbox_a[2], bbox_a[3])
+    delta_theta_b = ang_dist(bbox_b[2], bbox_b[3])
 
-    distances = vmap(get_dist)(bboxes)
-    return bboxes[jnp.argsort(distances)][0]
+    # Condition for nearly overlapping in r
+    cond_r = jnp.abs(bbox_b[0] - bbox_a[0]) < 1.2 * jnp.max(
+        jnp.array([delta_r_a, delta_r_b])
+    )
+
+    # Condition for nearly overlapping in theta
+    bbox_merged = merge_two_bboxes(bbox_a, bbox_b)
+    cond_theta = ang_dist(bbox_merged[2], bbox_merged[3]) < 1.2 * (
+        delta_theta_a + delta_theta_b
+    )
+
+    return jnp.where(jnp.all(bbox_a == bbox_b), False, cond_r * cond_theta)
 
 
 @partial(jit, static_argnames=("f_r", "f_theta"))
-def extend_bboxes_polar(bboxes, f_r=0.2, f_theta=0.05):
+def process_bboxes_polar(bboxes, f_r=0.1, f_theta=0.1):
     """
-    Given a set of bounding boxes in polar coordinates, extend them by a factor
-    of `f_r` in the radial direction and `f_theta` in the angular direction
-    while making sure that if two edges of are nearly adjecent, the two edges
-    are extended to match exactly.
-
-    The purpose of this is to make sure that that all parts of the images are
-    covered by the bounding boxes.
+    Given a set of bounding boxes, slightly extend each bounding box in r and
+    theta, then determine if it is overlapping any of the neighbours and merge
+    it with the overlapping neighbour. Repeat for each bounding box until
+    we are left with only isolated nonoveralping bounding boxes.
 
     Args:
         bboxes (array_like): Bounding boxes, shape (n_bboxes, 4).
         f_r (float): Factor to extend the radial bounding box by.
         f_theta (float): Factor to extend the angular bounding box by.
     Returns:
-        array_like: Extended bounding boxes.
+        array_like: Extended and merged bounding boxes. Those bboxes that
+            end up getting merged are set to all zeros.
     """
-    # Sort bboxes based on the inner theta edge
-    bboxes = bboxes[jnp.argsort(bboxes[:, 2])]
+    # Extend bboxes
+    bboxes = vmap(lambda bbox: extend_bbox(bbox, f_r, f_theta))(bboxes)
 
-    for c, bbox in enumerate(bboxes):
-        # Get shape of the central bbox
-        theta_width = ang_dist(bboxes[c, 2], bboxes[c, 3])
-        rwidth = bboxes[c, 1] - bboxes[c, 0]
+    def merge_and_remove(bboxes, i, j):
+        bbox_merged = merge_two_bboxes(bboxes[i], bboxes[j])
+        bboxes = bboxes.at[i].set(bbox_merged)
+        return bboxes.at[j].set(jnp.zeros(4))
 
-        # Extend each bbox in theta and r but if two bboxes are close to each
-        # other in theta merge their edges
+    for i in range(len(bboxes)):
+        bbox = bboxes[i]
 
-        # Adjacent bboxes in the positive and negative theta directions
-        bbox_adjacent_pos = get_closest_bbox_pos_dir(
-            bbox, jnp.delete(bboxes, c, axis=0)
-        )
-        bbox_adjacent_neg = get_closest_bbox_neg_dir(
-            bbox, jnp.delete(bboxes, c, axis=0)
+        # Check if the bbox overlaps with any of the neighbours
+        mask_overlap = vmap(lambda bbox_other: bboxes_near_overlap(bbox, bbox_other))(
+            bboxes
         )
 
-        cond_pos = bboxes_near_overlap_pos_dir(bbox, bbox_adjacent_pos)
-        cond_neg = bboxes_near_overlap_neg_dir(bbox, bbox_adjacent_neg)
-
-        def case2(bboxes):
-            """bbox close to another bbox in the positive or negative bbox direction."""
-            return jnp.where(
-                cond_pos,
-                jnp.array(
-                    [
-                        bbox[0] - f_r * rwidth,
-                        bbox[1] + f_r * rwidth,
-                        sub_angles(bbox[2], f_theta * theta_width),
-                        bbox_adjacent_pos[2],
-                    ]
-                ),
-                jnp.array(
-                    [
-                        bbox[0] - f_r * rwidth,
-                        bbox[1] + f_r * rwidth,
-                        bbox_adjacent_neg[3],
-                        add_angles(bbox[3], f_theta * theta_width),
-                    ]
-                ),
-            )
-
-        def case1(bboxes):
-            return jnp.where(
-                cond_pos + cond_neg,  # close to another bbox on one of the sides
-                case2(bboxes),
-                jnp.array(
-                    [
-                        bbox[0] - f_r * rwidth,
-                        bbox[1] + f_r * rwidth,
-                        sub_angles(bbox[2], f_theta * theta_width),
-                        add_angles(bbox[3], f_theta * theta_width),
-                    ]
-                ),
-            )
-
-        bbox_new = jnp.where(
-            cond_pos * cond_neg,  # close to another bbox at both sides
-            jnp.array(
-                [
-                    bbox[0] - f_r * rwidth,
-                    bbox[1] + f_r * rwidth,
-                    bbox_adjacent_neg[3],
-                    bbox_adjacent_pos[2],
-                ]
-            ),
-            case1(bboxes),
+        # Return new bboxes which area either unchanged or one pair of bboxes
+        # gets merged
+        bboxes = jnp.where(
+            jnp.logical_or(mask_overlap.sum() == 0, jnp.all(bbox == 0.0)),
+            bboxes,  # nothing happens if there are no overlaps or the bbox is all zeros
+            merge_and_remove(bboxes, i, jnp.argsort(mask_overlap)[-1]),
         )
-
-        bboxes = bboxes.at[c].set(bbox_new)
-
     return bboxes
-
-
-@partial(
-    jit,
-    static_argnames=(
-        "npts_r",
-        "npts_theta",
-        "a1",
-    ),
-)
-def integrate_within_bbox_binary(
-    bbox, a, e1, w_center, rho_source, npts_r=100, npts_theta=1000, a1=0.1
-):
-    rmin, rmax, tmin, tmax = bbox
-
-    # equivalent of np.linspace but ignoring the singularity at [-pi, pi]
-    linspace_ang = lambda t1, t2, npts: add_angles(
-        t1, jnp.linspace(0, ang_dist(t1, t2), npts)
-    )
-
-    # Image plane
-    r = jnp.linspace(rmin, rmax, npts_r)
-    theta = linspace_ang(tmin, tmax, npts_theta)
-    dr = r[1] - r[0]
-    dtheta = ang_dist(theta[1], theta[0])
-    rgrid, thetagrid = jnp.meshgrid(r, theta)
-
-    xgrid = rgrid * jnp.cos(thetagrid)
-    ygrid = rgrid * jnp.sin(thetagrid)
-    zgrid = xgrid + 1j * ygrid
-
-    # Lens plane
-    w = lens_eq_binary(zgrid, a, e1)
-    x_w, y_w = jnp.real(w), jnp.imag(w)
-    fn = (
-        (x_w - jnp.real(w_center)) ** 2 + (y_w - jnp.imag(w_center)) ** 2
-        <= rho_source ** 2
-    ).astype(float)
-
-    integrate_2d = lambda r, f: jnp.trapz(
-        jnp.trapz(f * r, dx=dr, axis=0), dx=dtheta, axis=0
-    )
-    _rgrid = (x_w - jnp.real(w_center)) ** 2 + (y_w - jnp.imag(w_center)) ** 2
-    integrand = fn * linear_limbdark(_rgrid, 1.0, c=a1)
-
-    return integrate_2d(r, integrand)
 
 
 @jit
@@ -327,7 +274,27 @@ def linear_limbdark(r, I0, c=0.1):
 
 
 @partial(jit, static_argnames=("npts",))
-def images_of_source_limb(w_center, rho_source, a, e1, npts=800):
+def images_of_source_limb_binary(w_center, rho_source, a, e1, npts=1000):
+    """
+    Solve for the images of uniformly distributed points on the limb of a
+    circular disc with radius `rho_source` and center `w_center`.
+
+    WARNING: Using too few points may lead to cases where a part of the source
+    disc which crossed the caustic is not accounted for. Also, since the images
+    of the limb determine the extent of the integration grids in the image plane
+    using too few points may lead to situations where the grids end up being
+    too small and don't cover the entire image.
+
+    Args:
+        w_center (complex128): Center of the disc in the source plane.
+        rho_source (float): Radius of the source disc in angular Einstein radii.
+        a (float): Half the lens separation.
+        e1 (float): m1/(m1 + m2).
+        npts (int, optional): Number of points on the limb. Defaults to 1000.
+
+    Returns:
+        array_like: The images for each point on the limb.
+    """
     theta = jnp.linspace(-np.pi, np.pi, npts)
     x = rho_source * jnp.cos(theta) + jnp.real(w_center)
     y = rho_source * jnp.sin(theta) + jnp.imag(w_center)
@@ -340,17 +307,30 @@ def images_of_source_limb(w_center, rho_source, a, e1, npts=800):
 @partial(
     jit,
     static_argnames=(
-        "npts_r",
-        "npts_theta",
+        "grid_size",
+        "grid_size_ratio",
         "npts_limb",
         "a1",
+        "f_r",
+        "f_theta",
     ),
 )
 def mag_extended_source_binary(
-    a, e1, w_center, rho_source, npts_r=100, npts_theta=1000, npts_limb=800, a1=0.1
+    a,
+    e1,
+    w_center,
+    rho_source,
+    grid_size=0.02,
+    grid_size_ratio=4.0,
+    npts_limb=1000,
+    a1=0.1,
 ):
-    # Get images of source limb and center
-    z_limb = images_of_source_limb(w_center, rho_source, a, e1, npts=npts_limb)
+    # Set the resolution of the grid in r and theta
+    dr = grid_size * rho_source
+    dtheta = grid_size_ratio * dr
+
+    # Get images of source limb
+    z_limb = images_of_source_limb_binary(w_center, rho_source, a, e1, npts=npts_limb)
 
     # Get seed locations within all images
     get_centroids_init = lambda z: z[(z != 0).prod(axis=1).argsort()[-1]]
@@ -385,24 +365,34 @@ def mag_extended_source_binary(
         ),
     )(label_idcs)
 
-    bboxes_final = extend_bboxes_polar(bboxes, f_r=0.2, f_theta=0.1)
+    bboxes = process_bboxes_polar(bboxes, f_r=0.1, f_theta=0.1)
 
-    # Compute integrals
+    # Compute the integrals for each of the bboxes
     integrals = []
-    for bbox in bboxes_final:
-        I = integrate_within_bbox_binary(
-            bbox,
+    for bbox in bboxes:
+        rmin, rmax, tmin, tmax = bbox
+        rmin_g = rmin - (rmin % dr)
+        tmin_g = sub_angles(tmin, tmin % dtheta)
+        nr = jnp.ceil((rmax - rmin) / dr).astype(int)
+        ntheta = jnp.ceil(ang_dist(bbox[2], bbox[3]) / dtheta).astype(int)
+
+        I = integrate_image(
+            rmin_g,
+            tmin_g,
+            dr,
+            dtheta,
+            nr,
+            ntheta,
+            rho_source,
+            a1,
             a,
             e1,
-            w_center,
-            rho_source,
-            npts_r=npts_r,
-            npts_theta=npts_theta,
-            a1=a1,
+            jnp.complex128(w_center),
         )
-        integrals.append(I)
-    I = jnp.sum(jnp.array(integrals))
 
+        integrals.append(I)
+
+    I = jnp.sum(jnp.array(integrals))
     mag = I / (np.pi * rho_source ** 2)
 
     return mag

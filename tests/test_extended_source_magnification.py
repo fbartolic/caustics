@@ -9,9 +9,7 @@ from jax.test_util import check_grads
 
 from caustics.extended_source_magnification import (
     get_bbox_polar,
-    bboxes_near_overlap_neg_dir,
-    bboxes_near_overlap_pos_dir,
-    extend_bboxes_polar,
+    merge_polar_intervals,
 )
 from caustics.utils import min_zero_avoiding, ang_dist
 
@@ -67,28 +65,24 @@ def test_get_bbox_polar():
     assert bbox[3] == jnp.deg2rad(-20.0)
 
 
-def test_bboxes_near_overlap():
-    bbox_a = jnp.array([0.8, 1.0, jnp.deg2rad(160.0), jnp.deg2rad(-160)])
-    bbox_b = jnp.array([0.3, 0.75, jnp.deg2rad(170.0), jnp.deg2rad(-170.0)])
+def test_merge_polar_intervals():
+    a = jnp.array([jnp.deg2rad(160.0), jnp.deg2rad(-173.0)])
+    b = jnp.array([jnp.deg2rad(160.05), jnp.deg2rad(-170.0)])
+    c_sol = jnp.array([jnp.deg2rad(160.0), jnp.deg2rad(-170.0)])
 
-    assert bboxes_near_overlap_neg_dir(bbox_a, bbox_b) == False
-    assert bboxes_near_overlap_pos_dir(bbox_a, bbox_b) == False
+    np.testing.assert_allclose(merge_polar_intervals(a, b), c_sol)
+    np.testing.assert_allclose(merge_polar_intervals(b, a), c_sol)
 
-    bbox_a = jnp.array([0.6, 0.8, jnp.deg2rad(160.0), jnp.deg2rad(179.0)])
-    bbox_b = jnp.array([0.81, 1.0, jnp.deg2rad(-179.0), jnp.deg2rad(-160.0)])
+    a = jnp.array([jnp.deg2rad(45.0), jnp.deg2rad(-70.0)])
+    b = jnp.array([jnp.deg2rad(-75.0), jnp.deg2rad(15.0)])
+    c_sol = jnp.array([jnp.deg2rad(45.0), jnp.deg2rad(15.0)])
 
-    assert bboxes_near_overlap_neg_dir(bbox_a, bbox_b) == False
-    assert bboxes_near_overlap_pos_dir(bbox_a, bbox_b) == True
-    assert bboxes_near_overlap_neg_dir(bbox_b, bbox_a) == True
-    assert bboxes_near_overlap_pos_dir(bbox_b, bbox_a) == False
+    np.testing.assert_allclose(merge_polar_intervals(a, b), c_sol)
+    np.testing.assert_allclose(merge_polar_intervals(b, a), c_sol)
 
+    a = jnp.array([jnp.deg2rad(130.0), jnp.deg2rad(150.0)])
+    b = jnp.array([jnp.deg2rad(-178), jnp.deg2rad(-150.0)])
+    c_sol = jnp.array([jnp.deg2rad(130.0), jnp.deg2rad(-150.0)])
 
-def test_extend_bboxes_polar():
-    bbox_a = jnp.array([0.6, 0.8, jnp.deg2rad(160.0), jnp.deg2rad(179.0)])
-    bbox_b = jnp.array([0.81, 1.0, jnp.deg2rad(-179.0), jnp.deg2rad(-160.0)])
-    bbox_c = jnp.array([0.2, 0.3, jnp.deg2rad(170.0), jnp.deg2rad(-170.0)])
-
-    bboxes = jnp.vstack([bbox_a, bbox_b, bbox_c])
-    bboxes = extend_bboxes_polar(bboxes)
-
-    assert bboxes[0][2] == bboxes[1][3]
+    np.testing.assert_allclose(merge_polar_intervals(a, b), c_sol)
+    np.testing.assert_allclose(merge_polar_intervals(b, a), c_sol)
