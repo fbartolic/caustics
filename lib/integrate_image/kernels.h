@@ -12,10 +12,12 @@ using complex = thrust::complex<double>;
 
 namespace integrate_polar
 {
-  //  struct IntegrateImageDescriptor
-  //  {
-  //    int dummy;
-  //  };
+  struct IntegrateImageDescriptor
+  {
+    double eps;
+    double f;
+    double grid_ratio;
+  };
 
   void gpu_integrate_image(cudaStream_t stream, void **buffers, const char *opaque,
                            std::size_t opaque_len);

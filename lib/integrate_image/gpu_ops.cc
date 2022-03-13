@@ -21,7 +21,7 @@ namespace
   PYBIND11_MODULE(integrate_image_gpu_op, m)
   {
     m.def("registrations", &Registrations);
-    //    m.def("build_integrate_image_descriptor", [](int dummy)
-    //          { return PackDescriptor(IntegrateImageDescriptor{nr, ntheta}); });
+    m.def("build_integrate_image_descriptor", [](double eps, double f, double grid_ratio)
+          { return PackDescriptor(IntegrateImageDescriptor{eps, f, grid_ratio}); });
   }
 } // namespace

@@ -30,12 +30,38 @@ else:
 xops = xla_client.ops
 
 # This function exposes the primitive to user code
-@jit
+@partial(jit, static_argnames=("eps", "f", "grid_size_ratio"))
 def integrate_image(
-    rmin, theta_min, dr, dtheta, nr, ntheta, rho, a1, a, e1, source_center
+    rmin,
+    rmax,
+    theta_min,
+    theta_max,
+    dr_initial,
+    dtheta_initial,
+    rho,
+    a1,
+    a,
+    e1,
+    source_center,
+    eps=1e-04,
+    f=0.8,
+    grid_size_ratio=4.0,
 ):
     return _integrate_image_prim.bind(
-        rmin, theta_min, dr, dtheta, nr, ntheta, rho, a1, a, e1, source_center
+        rmin,
+        rmax,
+        theta_min,
+        theta_max,
+        dr_initial,
+        dtheta_initial,
+        rho,
+        a1,
+        a,
+        e1,
+        source_center,
+        eps=eps,
+        f=f,
+        grid_size_ratio=grid_size_ratio,
     )
 
 
@@ -46,7 +72,7 @@ def integrate_image(
 # For JIT compilation we need a function to evaluate the shape and dtype of the
 # outputs of our op for some given inputs
 def _integrate_image_abstract(
-    rmin, theta_min, dr, dtheta, nr, ntheta, rho, a1, a, e1, source_center
+    rmin, theta_min, dr, dtheta, nr, ntheta, rho, a1, a, e1, source_center, **kwargs
 ):
     """
     Abstract evaluation of the primitive.
@@ -64,16 +90,19 @@ def _integrate_image_abstract(
 def _integrate_image_translation(
     c,
     rmin,
+    rmax,
     theta_min,
-    dr,
-    dtheta,
-    nr,
-    ntheta,
+    theta_max,
+    dr_initial,
+    dtheta_initial,
     rho,
     a1,
     a,
     e1,
     source_center,
+    eps=None,
+    f=None,
+    grid_size_ratio=None,
     platform="cpu",
 ):
     """
@@ -101,16 +130,19 @@ def _integrate_image_translation(
             # The inputs:
             operands=(
                 rmin,
+                rmax,
                 theta_min,
-                dr,
-                dtheta,
-                nr,
-                ntheta,
+                theta_max,
+                dr_initial,
+                dtheta_initial,
                 rho,
                 a1,
                 a,
                 e1,
                 source_center,
+                xops.ConstantLiteral(c, eps),
+                xops.ConstantLiteral(c, f),
+                xops.ConstantLiteral(c, grid_size_ratio),
             ),
             # The input shapes:
             operand_shapes_with_layout=(
@@ -118,13 +150,16 @@ def _integrate_image_translation(
                 xla_client.Shape.array_shape(np.dtype(np.float64), (), ()),
                 xla_client.Shape.array_shape(np.dtype(np.float64), (), ()),
                 xla_client.Shape.array_shape(np.dtype(np.float64), (), ()),
-                xla_client.Shape.array_shape(np.dtype(np.int64), (), ()),
-                xla_client.Shape.array_shape(np.dtype(np.int64), (), ()),
+                xla_client.Shape.array_shape(np.dtype(np.float64), (), ()),
+                xla_client.Shape.array_shape(np.dtype(np.float64), (), ()),
                 xla_client.Shape.array_shape(np.dtype(np.float64), (), ()),
                 xla_client.Shape.array_shape(np.dtype(np.float64), (), ()),
                 xla_client.Shape.array_shape(np.dtype(np.float64), (), ()),
                 xla_client.Shape.array_shape(np.dtype(np.float64), (), ()),
                 xla_client.Shape.array_shape(np.dtype(np.complex128), (), ()),
+                xla_client.Shape.array_shape(np.dtype(np.float64), (), ()),
+                xla_client.Shape.array_shape(np.dtype(np.float64), (), ()),
+                xla_client.Shape.array_shape(np.dtype(np.float64), (), ()),
             ),
             # The output shapes:
             shape_with_layout=xla_client.Shape.array_shape(
@@ -138,18 +173,20 @@ def _integrate_image_translation(
                 "The 'integrate_image' module was not compiled with CUDA support"
             )
 
-        # opaque = integrate_image_gpu_op.build_integrate_image_descriptor(0)
+        opaque = integrate_image_gpu_op.build_integrate_image_descriptor(
+            eps, f, grid_size_ratio
+        )
 
         return xops.CustomCallWithLayout(
             c,
             op_name,
             operands=(
                 rmin,
+                rmax,
                 theta_min,
-                dr,
-                dtheta,
-                nr,
-                ntheta,
+                theta_max,
+                dr_initial,
+                dtheta_initial,
                 rho,
                 a1,
                 a,
@@ -161,8 +198,8 @@ def _integrate_image_translation(
                 xla_client.Shape.array_shape(np.dtype(np.float64), (), ()),
                 xla_client.Shape.array_shape(np.dtype(np.float64), (), ()),
                 xla_client.Shape.array_shape(np.dtype(np.float64), (), ()),
-                xla_client.Shape.array_shape(np.dtype(np.int64), (), ()),
-                xla_client.Shape.array_shape(np.dtype(np.int64), (), ()),
+                xla_client.Shape.array_shape(np.dtype(np.float64), (), ()),
+                xla_client.Shape.array_shape(np.dtype(np.float64), (), ()),
                 xla_client.Shape.array_shape(np.dtype(np.float64), (), ()),
                 xla_client.Shape.array_shape(np.dtype(np.float64), (), ()),
                 xla_client.Shape.array_shape(np.dtype(np.float64), (), ()),
@@ -173,7 +210,7 @@ def _integrate_image_translation(
             shape_with_layout=xla_client.Shape.array_shape(
                 np.dtype(np.float64), (), ()
             ),
-            opaque=b"",
+            opaque=opaque,
         )
 
     raise ValueError("Unsupported platform; this must be either 'cpu' or 'gpu'")

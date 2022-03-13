@@ -310,9 +310,9 @@ def images_of_source_limb_binary(w_center, rho_source, a, e1, npts=1000):
         "grid_size",
         "grid_size_ratio",
         "npts_limb",
-        "a1",
         "f_r",
         "f_theta",
+        "eps",
     ),
 )
 def mag_extended_source_binary(
@@ -320,8 +320,9 @@ def mag_extended_source_binary(
     e1,
     w_center,
     rho_source,
-    grid_size=0.02,
+    grid_size=0.05,
     grid_size_ratio=4.0,
+    eps=1e-04,
     npts_limb=1000,
     a1=0.1,
 ):
@@ -371,25 +372,22 @@ def mag_extended_source_binary(
     integrals = []
     for bbox in bboxes:
         rmin, rmax, tmin, tmax = bbox
-        rmin_g = rmin - (rmin % dr)
-        tmin_g = sub_angles(tmin, tmin % dtheta)
-        nr = jnp.ceil((rmax - rmin) / dr).astype(int)
-        ntheta = jnp.ceil(ang_dist(bbox[2], bbox[3]) / dtheta).astype(int)
 
         I = integrate_image(
-            rmin_g,
-            tmin_g,
+            rmin,
+            rmax,
+            tmin,
+            tmax,
             dr,
             dtheta,
-            nr,
-            ntheta,
             rho_source,
             a1,
             a,
             e1,
             jnp.complex128(w_center),
+            eps=eps,
+            grid_size_ratio=grid_size_ratio,
         )
-
         integrals.append(I)
 
     I = jnp.sum(jnp.array(integrals))
