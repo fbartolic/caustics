@@ -32,7 +32,7 @@ xops = xla_client.ops
 
 # This function exposes the primitive to user code
 @partial(jit, static_argnames=("eps", "f", "grid_size_ratio"))
-def integrate_image(
+def integrate_image_binary(
     rmin,
     rmax,
     theta_min,
@@ -75,7 +75,7 @@ def integrate_image(
 
 # For JIT compilation we need a function to evaluate the shape and dtype of the
 # outputs of our op for some given inputs
-def _integrate_image_abstract(
+def _integrate_image_binary_abstract(
     rmin, theta_min, dr, dtheta, nr, ntheta, rho, a1, a, e1, w_cent_real, w_cent_imag, **kwargs
 ):
     """
@@ -91,7 +91,7 @@ def _integrate_image_abstract(
 # We also need a translation rule to convert the function into an XLA op. In
 # our case this is the custom XLA op that we've written. We're wrapping two
 # translation rules into one here: one for the CPU and one for the GPU
-def _integrate_image_translation(
+def _integrate_image_binary_translation(
     c,
     rmin,
     rmax,
@@ -224,7 +224,7 @@ def _integrate_image_translation(
 
 
 @partial(jit, static_argnames=("eps", "f", "grid_size_ratio"))
-def integrate_image_grad(
+def integrate_image_binary_grad(
     rmin,
     rmax,
     theta_min,
@@ -259,7 +259,7 @@ def integrate_image_grad(
         grid_size_ratio=grid_size_ratio,
     )
 
-def _integrate_image_grad_abstract(
+def _integrate_image_binary_grad_abstract(
     rmin, theta_min, dr, dtheta, nr, ntheta, rho, a1, a, e1, w_cent_real, w_cent_imag, **kwargs
 ):
     dtype = dtypes.canonicalize_dtype(np.float64)
@@ -267,7 +267,7 @@ def _integrate_image_grad_abstract(
 
 
 
-def _integrate_image_grad_translation(
+def _integrate_image_binary_grad_translation(
     c,
     rmin,
     rmax,
@@ -364,13 +364,13 @@ def _integrate_image_grad_translation(
 # that both evaluates the primitive on the primals and applies the primitive’s
 # JVP at those primal values.
 @partial(jit, static_argnames=("eps", "f", "grid_size_ratio"))
-def _integrate_image_jvp(args, tangents, **kwargs):
+def _integrate_image_binary_jvp(args, tangents, **kwargs):
     """
     Compute the Jacobian-vector product of the integration routine.
 
 
     Args:
-        args (tuple): The arguments to the function `integrate_image`.
+        args (tuple): The arguments to the function `integrate_image_binary`.
         tangents (tuple): Small perturbation to the arguments.
 
     Returns:
@@ -379,7 +379,7 @@ def _integrate_image_jvp(args, tangents, **kwargs):
     def zero_tangent(tan):
         return 0. if type(tan) is ad.Zero else tan
 
-    out = integrate_image_grad(*args, **kwargs)
+    out = integrate_image_binary_grad(*args, **kwargs)
     
     primal_out = out[0] 
     tangent_out = jnp.sum(
@@ -411,29 +411,29 @@ def _integrate_image_jvp(args, tangents, **kwargs):
 # *********************************************
 _integrate_image_prim = core.Primitive("integrate_image")
 _integrate_image_prim.def_impl(partial(xla.apply_primitive, _integrate_image_prim))
-_integrate_image_prim.def_abstract_eval(_integrate_image_abstract)
+_integrate_image_prim.def_abstract_eval(_integrate_image_binary_abstract)
 
 _integrate_image_grad_prim = core.Primitive("integrate_image_grad")
 _integrate_image_grad_prim.def_impl(partial(xla.apply_primitive, _integrate_image_grad_prim))
-_integrate_image_grad_prim.def_abstract_eval(_integrate_image_grad_abstract)
+_integrate_image_grad_prim.def_abstract_eval(_integrate_image_binary_grad_abstract)
 
 
 # Connect the XLA translation rules for JIT compilation
 xla.backend_specific_translations["cpu"][_integrate_image_prim] = partial(
-    _integrate_image_translation, platform="cpu"
+    _integrate_image_binary_translation, platform="cpu"
 )
 xla.backend_specific_translations["gpu"][_integrate_image_prim] = partial(
-    _integrate_image_translation, platform="gpu"
+    _integrate_image_binary_translation, platform="gpu"
 )
 
 xla.backend_specific_translations["cpu"][_integrate_image_grad_prim] = partial(
-    _integrate_image_grad_translation, platform="cpu"
+    _integrate_image_binary_grad_translation, platform="cpu"
 )
 xla.backend_specific_translations["gpu"][_integrate_image_grad_prim] = partial(
-    _integrate_image_grad_translation, platform="gpu"
+    _integrate_image_binary_grad_translation, platform="gpu"
 )
 
 
 # Connect the JVP and batching rules
-ad.primitive_jvps[_integrate_image_prim] = _integrate_image_jvp
+ad.primitive_jvps[_integrate_image_prim] = _integrate_image_binary_jvp
 # batching.primitive_batchers[_integrate_image_prim] = _integrate_image_batch

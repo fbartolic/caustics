@@ -12,7 +12,7 @@ from caustics.extended_source_magnification import (
     merge_polar_intervals,
 )
 from caustics.utils import min_zero_avoiding, ang_dist
-from caustics.integrate_image_primitive import integrate_image
+from caustics.integrate_image_primitive import integrate_image_binary
 
 import VBBinaryLensing
 
@@ -102,7 +102,7 @@ def test_integrate_image_binary_grad():
     w_cent_real = 0.3955
     w_cent_imag = 0.
 
-    fn = lambda a: integrate_image(
+    fn = lambda a: integrate_image_binary(
         rmin, rmax, theta_min, theta_max, dr, dtheta, rho, a1, a, e1, w_cent_real, w_cent_imag
     )
     check_grads(fn, (e1,), 1, eps=1e-08)

@@ -16,9 +16,9 @@ from . import (
     images_point_source_triple,
     mag_point_source_binary,
     mag_point_source_triple,
-    integrate_image,
 )
 from .utils import *
+from .integrate_image_primitive import integrate_image_binary
 
 
 @partial(jit, static_argnames=("npts",))
@@ -373,7 +373,7 @@ def mag_extended_source_binary(
     for bbox in bboxes:
         rmin, rmax, tmin, tmax = bbox
 
-        I = integrate_image(
+        I = integrate_image_binary(
             rmin,
             rmax,
             tmin,
@@ -384,8 +384,10 @@ def mag_extended_source_binary(
             a1,
             a,
             e1,
-            jnp.complex128(w_center),
+            jnp.real(w_center),
+            jnp.imag(w_center),
             eps=eps,
+            f=0.8,
             grid_size_ratio=grid_size_ratio,
         )
         integrals.append(I)
