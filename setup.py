@@ -55,6 +55,7 @@ class CMakeBuildExt(build_ext):
             "-DPython_INCLUDE_DIRS={}".format(cmake_python_include_dir),
             "-DCMAKE_BUILD_TYPE={}".format("Debug" if self.debug else "Release"),
             "-DCMAKE_PREFIX_PATH={}".format(pybind11.get_cmake_dir()),
+            "-DEnzyme_DIR=/home/fb90/opt/Enzyme/enzyme/build",
             #            "-DCMAKE_CXX_COMPILER=g++",
         ]
         if os.environ.get("CAUSTICS_CUDA", "no").lower() == "yes":
@@ -90,7 +91,7 @@ extensions = [
     Extension(
         "caustics.integrate_image_cpu_op",
         ["src/caustics/src/integrate_image_cpu_op.cc"],
-    ),
+    )
 ]
 
 if os.environ.get("CAUSTICS_CUDA", "no").lower() == "yes":
@@ -100,15 +101,6 @@ if os.environ.get("CAUSTICS_CUDA", "no").lower() == "yes":
             [
                 "src/caustics/src/ehrlich_aberth_gpu_op.cc",
                 "src/caustics/src/ehrlich_aberth_cuda_kernels.cc.cu",
-            ],
-        )
-    )
-    extensions.append(
-        Extension(
-            "caustics.integrate_image_gpu_op",
-            [
-                "src/caustics/src/integrate_image_gpu_op.cc",
-                "src/caustics/src/integrate_image_cuda_kernels.cc.cu",
             ],
         )
     )

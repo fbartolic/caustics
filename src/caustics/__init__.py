@@ -11,10 +11,7 @@ __all__ = [
     "mag_extended_source_direct_integration_binary",
     "critical_and_caustic_curves_binary",
     "critical_and_caustic_curves_triple",
-    "integrate_image",
 ]
-
-from .inegrate_image_primitive import integrate_image
 
 from .point_source_magnification import (
     lens_eq_binary,

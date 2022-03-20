@@ -221,7 +221,7 @@ def _ehrlich_aberth_jvp(args, tangents, itmax=None, compensated=None):
 
     \partial_z0 h(p0) = -[\partial_z f(z0, p0)]^(-1) \partial_p f(z0, p0)
 
-    THe first part of the above equation is the first derivative of f(z, p)
+    The first part of the above equation is the first derivative of f(z, p)
     evaluated at the root z0 and the second part is a vector of partial derivatives
     of f with respect to each of the coefficients which gets dotted into the
     tangent vector dp.

@@ -12,6 +12,7 @@ from caustics.extended_source_magnification import (
     merge_polar_intervals,
 )
 from caustics.utils import min_zero_avoiding, ang_dist
+from caustics.integrate_image_primitive import integrate_image
 
 import VBBinaryLensing
 
@@ -86,3 +87,22 @@ def test_merge_polar_intervals():
 
     np.testing.assert_allclose(merge_polar_intervals(a, b), c_sol)
     np.testing.assert_allclose(merge_polar_intervals(b, a), c_sol)
+
+def test_integrate_image_binary_grad():
+    rmin = 1.2460687963709596
+    rmax = 1.3807432495443732
+    theta_min = -0.6736152464838706
+    theta_max = 0.6736152464838707
+    dr = 0.0005
+    dtheta = 0.002
+    rho = 0.01
+    a1 = 0.2
+    a = 0.45
+    e1 = 0.8
+    w_cent_real = 0.3955
+    w_cent_imag = 0.
+
+    fn = lambda a: integrate_image(
+        rmin, rmax, theta_min, theta_max, dr, dtheta, rho, a1, a, e1, w_cent_real, w_cent_imag
+    )
+    check_grads(fn, (e1,), 1, eps=1e-08)
