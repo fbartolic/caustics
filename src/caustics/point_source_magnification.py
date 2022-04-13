@@ -21,7 +21,7 @@ from .ehrlich_aberth_primitive import poly_roots
 
 
 @jit
-def poly_coeffs_binary(w, a, e1):
+def _poly_coeffs_binary(w, a, e1):
     """
     Compute the coefficients of the complex polynomial equation corresponding
     to the binary lens equation. The function returns a vector of coefficients
@@ -94,7 +94,7 @@ def poly_coeffs_binary(w, a, e1):
 
 
 @jit
-def poly_coeffs_triple(w, a, r3, e1, e2):
+def _poly_coeffs_triple(w, a, r3, e1, e2):
     """
     Compute the coefficients of the complex polynomial equation corresponding
     to the triple lens equation. The function returns a vector of coefficients
@@ -1488,7 +1488,7 @@ def poly_coeffs_triple(w, a, r3, e1, e2):
 
 
 @jit
-def poly_coeffs_critical_binary(phi, a, e1):
+def _poly_coeffs_critical_binary(phi, a, e1):
     """
     Compute the coefficients of 2*Nth order polynomial which defines the critical
     curves for the binary lens case (N = 2).
@@ -1505,7 +1505,7 @@ def poly_coeffs_critical_binary(phi, a, e1):
 
 
 @jit
-def poly_coeffs_critical_triple(phi, a, r3, e1, e2):
+def _poly_coeffs_critical_triple(phi, a, r3, e1, e2):
     x = jnp.exp(-1j * phi)
 
     p_0 = x
@@ -1584,7 +1584,7 @@ def lens_eq_jac_det_triple(z, a, r3, e1, e2):
 @partial(jit, static_argnames=("npts"))
 def critical_and_caustic_curves_binary(a, e1, npts=200):
     phi = jnp.linspace(-np.pi, np.pi, npts)
-    coeffs = jnp.moveaxis(poly_coeffs_critical_binary(phi, a, e1), 0, -1)
+    coeffs = jnp.moveaxis(_poly_coeffs_critical_binary(phi, a, e1), 0, -1)
     critical_curves = poly_roots(coeffs).reshape(-1)
     caustic_curves = lens_eq_binary(critical_curves, a, e1)
 
@@ -1594,45 +1594,45 @@ def critical_and_caustic_curves_binary(a, e1, npts=200):
 @partial(jit, static_argnames=("npts"))
 def critical_and_caustic_curves_triple(a, r3, e1, e2, npts=200):
     phi = jnp.linspace(-np.pi, np.pi, npts)
-    coeffs = jnp.moveaxis(poly_coeffs_critical_triple(phi, a, r3, e1, e2), 0, -1)
+    coeffs = jnp.moveaxis(_poly_coeffs_critical_triple(phi, a, r3, e1, e2), 0, -1)
     critical_curves = poly_roots(coeffs).reshape(-1)
     caustic_curves = lens_eq_triple(critical_curves, a, r3, e1, e2)
 
     return critical_curves, caustic_curves
 
 
-@partial(jit, static_argnames=("root_solver_itmax"))
-def images_point_source_binary(w, a, e1, root_solver_itmax=2500):
+@partial(jit, static_argnames=("root_solver_itmax", "compensated"))
+def images_point_source_binary(w, a, e1, root_solver_itmax=2500, compensated=False):
     # Compute complex polynomial coefficients for each element of w
-    coeffs = poly_coeffs_binary(w, a, e1)
+    coeffs = _poly_coeffs_binary(w, a, e1)
 
     # Compute roots
-    roots = poly_roots(coeffs, itmax=root_solver_itmax)
+    roots = poly_roots(coeffs, itmax=root_solver_itmax, compensated=compensated)
     roots = jnp.moveaxis(roots, -1, 0)
 
     # Evaluate the lens equation at the roots
     lens_eq_eval = lens_eq_binary(roots, a, e1) - w
 
     # Mask out roots which don't satisfy the lens equation
-    mask_solutions = jnp.abs(lens_eq_eval) < 1e-10
+    mask_solutions = jnp.abs(lens_eq_eval) < 1e-5
 
     return roots, mask_solutions
 
 
-@partial(jit, static_argnames=("root_solver_itmax"))
-def images_point_source_triple(w, a, r3, e1, e2, root_solver_itmax=2500):
+@partial(jit, static_argnames=("root_solver_itmax", "compensated"))
+def images_point_source_triple(w, a, r3, e1, e2, root_solver_itmax=2500, compensated=False):
     # Compute complex polynomial coefficients for each element of w
-    coeffs = poly_coeffs_triple(w, a, r3, e1, e2)
+    coeffs = _poly_coeffs_triple(w, a, r3, e1, e2)
 
     # Compute roots
-    roots = poly_roots(coeffs, itmax=root_solver_itmax)
+    roots = poly_roots(coeffs, itmax=root_solver_itmax, compensated=compensated)
     roots = jnp.moveaxis(roots, -1, 0)
 
     # Evaluate the lens equation at the roots
     lens_eq_eval = lens_eq_triple(roots, a, r3, e1, e2) - w
 
     # Mask out roots which don't satisfy the lens equation
-    mask_solutions = jnp.abs(lens_eq_eval) < 1e-10
+    mask_solutions = jnp.abs(lens_eq_eval) < 1e-5
 
     return roots, mask_solutions
 

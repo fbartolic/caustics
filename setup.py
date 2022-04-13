@@ -87,10 +87,6 @@ extensions = [
         "caustics.ehrlich_aberth_cpu_op",
         ["src/caustics/src/ehrlich_aberth_cpu_op.cc"],
     ),
-    Extension(
-        "caustics.integrate_image_cpu_op",
-        ["src/caustics/src/integrate_image_cpu_op.cc"],
-    ),
 ]
 
 if os.environ.get("CAUSTICS_CUDA", "no").lower() == "yes":
@@ -100,15 +96,6 @@ if os.environ.get("CAUSTICS_CUDA", "no").lower() == "yes":
             [
                 "src/caustics/src/ehrlich_aberth_gpu_op.cc",
                 "src/caustics/src/ehrlich_aberth_cuda_kernels.cc.cu",
-            ],
-        )
-    )
-    extensions.append(
-        Extension(
-            "caustics.integrate_image_gpu_op",
-            [
-                "src/caustics/src/integrate_image_gpu_op.cc",
-                "src/caustics/src/integrate_image_cuda_kernels.cc.cu",
             ],
         )
     )

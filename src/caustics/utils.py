@@ -1,18 +1,41 @@
 # -*- coding: utf-8 -*-
-
 __all__ = [
+    "index_update",
+    "first_nonzero",
+    "last_nonzero",
+    "first_zero",
     "min_zero_avoiding",
     "max_zero_avoiding",
     "ang_dist",
     "ang_dist_diff",
     "add_angles",
     "sub_angles",
+    "sparse_argsort",
 ]
 
-import numpy as np
 import jax.numpy as jnp
 from jax import jit, vmap
 
+
+@jit
+def first_nonzero(x):
+    return (x != 0.).argmax(axis=0)
+
+@jit
+def last_nonzero(x):
+    return -(x[::-1] != 0.).argmax(axis=0) + len(x) - 1
+
+@jit
+def first_zero(x):
+    return (x == 0.).argmax(axis=0)
+
+
+@jit
+def index_update(X, idx, x):
+    X = X.at[idx].set(jnp.zeros_like(X[0]))
+    Y = jnp.zeros_like(X)
+    Y = Y.at[idx].set(x)
+    return X + Y
 
 @jit
 def min_zero_avoiding(x):
@@ -34,8 +57,6 @@ def max_zero_avoiding(x):
     max_x = jnp.max(x)
     cond = max_x == 0.0
     return jnp.where(cond, -min_zero_avoiding(jnp.abs(x)), max_x)
-
-
 
 @jit
 def ang_dist_diff(theta):
@@ -70,3 +91,6 @@ def ang_dist(theta1, theta2):
     """
     return jnp.abs(sub_angles(theta1, theta2))
 
+@jit
+def sparse_argsort(a):
+    return jnp.where(a != 0, a, jnp.nan).argsort()

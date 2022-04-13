@@ -9,7 +9,7 @@ from jax.config import config
 from jax.test_util import check_grads
 
 from caustics.ehrlich_aberth_primitive import poly_roots
-from caustics.point_source_magnification import poly_coeffs_binary
+from caustics.point_source_magnification import _poly_coeffs_binary
 
 
 config.update("jax_enable_x64", True)
@@ -22,7 +22,7 @@ def get_coeffs():
 
     # Compute complex polynomial coefficients for each source position
     w_points = jnp.linspace(0.3, 0.35, 10).astype(jnp.complex128)
-    coeffs = poly_coeffs_binary(w_points, a, e1).reshape(-1, 6)
+    coeffs = _poly_coeffs_binary(w_points, a, e1).reshape(-1, 6)
     return coeffs.reshape((5, 2, 6))
 
 
