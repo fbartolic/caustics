@@ -12,6 +12,7 @@ from functools import partial
 import numpy as np
 import jax.numpy as jnp
 from jax import jit, vmap, lax, random
+import jax.scipy as jsp
 
 from . import (
     images_point_source_binary,
@@ -51,7 +52,7 @@ def _inverse_transform_sampling(key, xp, fp, n_samples=1000):
 
 @partial(jit, static_argnames=("nlenses", "npts", "npts_init_fraction", "compensated"))
 def _images_of_source_limb(
-    key, w_center, rho, nlenses=2, npts=2000, npts_init_fraction=0.1, compensated=False, **kwargs
+    key, w_center, rho, nlenses=2, npts=1500, npts_init_fraction=0.2, compensated=False, **kwargs
 ):
     """
     Compute the images of a sequence of points on the limb of the source star.
@@ -79,8 +80,12 @@ def _images_of_source_limb(
     mag_init = jnp.sum((1.0 / jnp.abs(det_init)) * mask_init, axis=0)
 
     # Resample around high magnification regions
+    window_size = 20
+    window = jsp.stats.norm.pdf(jnp.linspace(-3, 3, window_size))
+    conv = lambda x: jnp.convolve(x, window, mode='same')
+    pdf = conv(jnp.abs(jnp.gradient(mag_init)))
     theta_dense = _inverse_transform_sampling(
-        key, theta_init, jnp.abs(jnp.gradient(mag_init)), n_samples=npts_dense)
+        key, theta_init, pdf, n_samples=npts_dense)
     x = rho * jnp.cos(theta_dense) + jnp.real(w_center)
     y = rho * jnp.sin(theta_dense) + jnp.imag(w_center)
     w_dense = x + 1j*y
@@ -188,9 +193,9 @@ def _split_single_segment(segment, n_parts=5):
         l, r = left_edges[i], right_edges[i]
         masks.append(
             jnp.where(
-                jnp.logical_and(l == 0., r == 0.), 
+                (l == 0.) & (r ==0.),
                 jnp.zeros(npts),
-                jnp.logical_and(n >= l, n <= r)
+                (n >= l) & (n <= r)
             )
         )
             
@@ -262,34 +267,36 @@ def _concatenate_segments(segment_first, segment_second):
 
 
 @partial(jit, static_argnames=("max_dist"))
-def _connection_condition(z, w, z2, w2, max_dist=1e-01):
+def _connection_condition(line1, line2, points_other, max_dist=5e-02):
     """
-    Given two points which define the end of one segment (z, z2) and two points
-    (w, w2) which define the end of the other segment where the "end" can be 
-    either the head of the tail of the segment. Evaluates to True if the two
-    segments should be connected. To determine whether the two segments should
-    be connected we form a line defined by the two points of the first segment 
-    and do the same for the second segment, we then find the intersection of 
-    the two lines and check that the intersection if "in between" the ends of 
-    the two segments. We also check that the angle between the two intersecting 
-    lines is greater than 90 degrees.
+    Dermine weather two segments should be connected or not. The input to the
+    function are two arrays `line1` and `line2` consisting of the last (or first)
+    two points of points of contour segments. We use four criterions to determine 
+    if the segments should be connected:
+        1. The endpoints of `line1` and `line2` are at most `max_dist` apart.
+        2. The point of interesection of lines `line1` and `line2` is at most
+        `max_dist` away from the endpoints of `line1` and `line2`.
+        3. The angle between lines `line1` and `line2` is greater than 90 degrees.
+        4. There are at most 2 points belonging to other segments which are 
+        located within a circle between the endpoints of `line1` and `line2` 
+        whose center is at the midpoint of the endpoints of the two lines.
 
     Args:
-        z (jnp.complex128): Point defining the end of the first segment.
-        z2 (_type_): Point adjacent to z. 
-        w (_type_): Point defining the end of the second segment.
-        w2 (_type_): Point adjacent to w.
+        line1(array_like): Size 2 array containing two points in the complex
+            plane where the second point is the end-point.
+        line1(array_like): Size 2 array containing two points in the complex
+            plane where the second point is the end-point.
         max_dist (float, optional): Maximum distance between the ends of the 
             two segments. If the distance is greater than this value function 
-            return `False`. Defaults to 1e-01.
+            return `False`. Defaults to 5e-02.
 
     Returns:
         bool: True if the two segments should be connected.
     """
-    x1, y1 = jnp.real(z), jnp.imag(z)
-    x2, y2 = jnp.real(z2), jnp.imag(z2)
-    x3, y3 = jnp.real(w), jnp.imag(w)
-    x4, y4 = jnp.real(w2), jnp.imag(w2)
+    x1, y1 = jnp.real(line1[0]), jnp.imag(line1[0])
+    x2, y2 = jnp.real(line1[1]), jnp.imag(line1[1])
+    x3, y3 = jnp.real(line2[0]), jnp.imag(line2[0])
+    x4, y4 = jnp.real(line2[1]), jnp.imag(line2[1])
     
     # Intersection of two lines
     D = (x1 - x2)*(y3 - y4) - (y1 - y2)*(x3 - x4)
@@ -297,19 +304,27 @@ def _connection_condition(z, w, z2, w2, max_dist=1e-01):
     py = ((x1*y2 - y1*x2)*(y3 - y4) - (y1 - y2)*(x3*y4 - y3*x4))/D
     p = px + 1j*py
     
+    # Require that z and w are close and that the intersection point is roughly equidistant
+    # from z and w
+    cond1 = jnp.abs(line1[1] - line2[1]) < max_dist
+    cond2 = (jnp.abs(line1[1] - p) < max_dist) & (jnp.abs(line2[1] - p) < max_dist) 
+
     # Angle between two vectors
-    vec1 = (z - z2)/jnp.abs(z - z2)
-    vec2 = (w - w2)/jnp.abs(w - w2)
+    vec1 = (line1[1] - line1[0])/jnp.abs(line1[1] - line1[0])
+    vec2 = (line2[1] - line2[0])/jnp.abs(line2[1] - line2[0])
     alpha = jnp.arccos(jnp.real(vec1)*jnp.real(vec2) + jnp.imag(vec1)*jnp.imag(vec2))
+    cond3 = jnp.rad2deg(alpha) > 90.0
+
+    # Require that there are no other segments in between the connection point
+    midpoint = (line1[1] + line2[1])/2.
+    mask = jnp.abs(points_other - midpoint) < 0.5*jnp.abs(line2[1] - line1[1])
+    cond4 = jnp.sum(mask*jnp.ones(points_other.shape)) <= 2 # if there are 1-2 
+    # points in between connect anyway
     
-    # Require that z and w are close and that the intersection point is close to both
-    cond1 = jnp.logical_and(jnp.abs(z - w) < max_dist, jnp.rad2deg(alpha) > 90.0)
-    cond2 = jnp.logical_and(jnp.abs(z - p) < max_dist, jnp.abs(w - p) < max_dist)
-    
-    return jnp.logical_and(cond1, cond2)
+    return cond1 & cond2 & cond3 & cond4
 
 @jit
-def _merge_two_segments(seg1, seg2, tidx1, tidx2):
+def _merge_two_segments(seg1, seg2, tidx1, tidx2, seg_remaining):
     """
     Given two segments seg1 and seg2, merge them if the condition for merging
     is satisfied, while keeping track of the parity of each segment.
@@ -319,6 +334,7 @@ def _merge_two_segments(seg1, seg2, tidx1, tidx2):
         seg2 (array_like): Second segment. 
         tidx1 (int): Index specifying the tail of the first segment.
         tidx2 (int): Index specifying the tail of the second segment.
+        seg_remaining (array_like): Array containing the remaining segments.
 
     Returns:
         (array_like, tidx): The merged segment and the tail index of the merged
@@ -327,34 +343,44 @@ def _merge_two_segments(seg1, seg2, tidx1, tidx2):
     """
     # Case 1 - Either of the two segments is all zeros
     case1 = jnp.logical_or(
-            jnp.all(seg1[0] == 0. + 0j),
-            jnp.all(seg2[0] == 0. + 0j),
+        jnp.all(seg1[0] == 0. + 0j),
+        jnp.all(seg2[0] == 0. + 0j),
     )
 
-    # Case 2 - Tail of segment i connects to head of segment j
+    # Case 2 - Tail of segment 1 should be connected to head of segment 2
     connection = _connection_condition(
-        seg1[0, tidx1], seg2[0, 0],
-        seg1[0, tidx1 - 1], seg2[0, 1]
+        lax.dynamic_slice_in_dim(seg1[0], tidx1 - 1, 2),
+        lax.dynamic_slice_in_dim(seg2[0], 0, 2)[::-1],
+        seg_remaining[:, 0, :].reshape(-1)
     )
     case2 = jnp.logical_or(connection, jnp.abs(seg1[0, tidx1] - seg2[0, 0]) < 1e-05)
     
-    # Case 3 - Tail of segment j connects to head of segment i
+    # Case 3 - Tail of segment 2 should be connected to head of segment 1
     connection = _connection_condition(
-        seg2[0, tidx2], seg1[0, 0],
-        seg2[0, tidx2 - 1], seg1[0, 1]
+        lax.dynamic_slice_in_dim(seg2[0], tidx2 - 1, 2),
+        lax.dynamic_slice_in_dim(seg1[0], 0, 2)[::-1],
+        seg_remaining[:, 0, :].reshape(-1)
     )
     case3 = jnp.logical_or(connection, jnp.abs(seg1[0, 0] - seg2[0, tidx2]) < 1e-05)
 
-    # Case 4 - Heads of segments i and j are connected 
+    # Case 4 - Heads of segments 1 and 2 should be connected 
     case4 = jnp.logical_or(
         jnp.abs(seg1[0, 0] - seg2[0, 0]) < 1e-05,
-        _connection_condition(seg1[0, 0], seg2[0, 0], seg1[0, 1], seg2[0, 1])
+        _connection_condition(
+            lax.dynamic_slice_in_dim(seg1[0], 0, 2)[::-1],
+            lax.dynamic_slice_in_dim(seg2[0], 0, 2)[::-1],
+            seg_remaining[:, 0, :].reshape(-1)
+        )
     )
     
-    # Case 5 - Tails of segments i and j are connected
+    # Case 5 - Tails of segments 1 and 2 should be connected
     case5 = jnp.logical_or(
         jnp.abs(seg1[0, tidx1] - seg2[0, tidx2]) < 1e-05,
-        _connection_condition(seg1[0, tidx1], seg2[0, tidx2],seg1[0, tidx1 - 1], seg2[0, tidx2 - 1])
+        _connection_condition(
+            lax.dynamic_slice_in_dim(seg1[0], tidx1 - 1, 2),
+            lax.dynamic_slice_in_dim(seg2[0], tidx2 - 1, 2),
+            seg_remaining[:, 0, :].reshape(-1)
+        )
     )
     
     # Case 6 - None of the above
@@ -397,6 +423,7 @@ def _merge_two_segments(seg1, seg2, tidx1, tidx2):
     )
     
     return seg_merged, tidx_merged 
+
 
 @jit
 def _get_segment_length(segment, tail_idx):
@@ -450,24 +477,26 @@ def _get_contours(segments, n_contours=5):
     idcs = jnp.concatenate([idcs, idcs, idcs, idcs])
     
     def body_fn(carry, idx):
-        seg_merged, tail_idx_merged, open_segments, tail_idcs = carry
-        seg_other, tail_idx_other = open_segments[idx], tail_idcs[idx]
+        seg_carry, tidx_carry, open_segments, tidcs = carry 
+        seg_other, tidx_other = open_segments[idx], tidcs[idx]
+        seg_remaining = open_segments.at[idx].set(jnp.zeros_like(open_segments[0]))
                 
-        # Merge the main segment with the other segment. If the merging condition
+        # Merge segment carried over from previous iteration with the other segment. 
+        # If the merging condition
         # isn't satisfied, the function returns the first argument. 
-        seg_merged_new, tail_idx_merged_new = _merge_two_segments(
-            seg_merged, seg_other, tail_idx_merged, tail_idx_other
+        seg_carry_new, tidx_carry_new = _merge_two_segments(
+            seg_carry, seg_other, tidx_carry, tidx_other, seg_remaining
         )
         
+        # Zero out the other segment if merge was successfull, otherwise do nothing
         val = jnp.where(
-            tail_idx_merged_new > tail_idx_merged, 
+            tidx_carry_new > tidx_carry, 
             jnp.zeros_like(open_segments[0]),
             open_segments[idx]
         )
         open_segments = open_segments.at[idx].set(val)
         
-        return (seg_merged_new, tail_idx_merged_new, open_segments, tail_idcs), 0.
-
+        return (seg_carry_new, tidx_carry_new, open_segments, tidcs), 0.
     init = (open_segments[0], tail_idcs[0], open_segments[1:], tail_idcs[1:])
     carry, _ = lax.scan(body_fn, init,  idcs)
     seg_merged, tail_idx_merged, open_segments, tail_idcs = carry 
@@ -583,8 +612,10 @@ def _integrate(w_center, rho, contours, u=0., nlenses=2, npts=500, **kwargs):
     # image
     return jnp.abs(mag*parity).sum() 
 
-@partial(jit, static_argnames=("npts_limb", "npts_ld"))
-def mag_extended_source_binary(rng_key, w, a, e1, rho, u=0., npts_limb=2000, npts_ld=100):
+@partial(jit, static_argnames=("npts_limb", "npts_ld", "npts_init_fraction", "debug"))
+def mag_extended_source_binary(
+    rng_key, w, a, e1, rho, u=0., npts_limb=2000, npts_ld=200, npts_init_fraction=0.2
+    ):
     """
     Compute the magnification for an extended source lensed by a binary lens
     using contour integration.
@@ -613,15 +644,18 @@ def mag_extended_source_binary(rng_key, w, a, e1, rho, u=0., npts_limb=2000, npt
         float: Total magnification factor.
     """
     images, images_mask, images_parity = _images_of_source_limb(
-        rng_key, w, rho, nlenses=2, a=a, e1=e1, npts=npts_limb, npts_init_fraction=0.3
+        rng_key, w, rho, nlenses=2, a=a, e1=e1, npts=npts_limb, npts_init_fraction=npts_init_fraction
     )
     segments = _get_segments(images, images_mask, images_parity, nlenses=2)
     contours = _get_contours(segments, n_contours=5)
     mag = _integrate(w, rho, contours, u=u, nlenses=2, npts=npts_ld, a=a, e1=e1)
+
     return mag
 
 @partial(jit, static_argnames=("npts_limb", "npts_ld"))
-def mag_extended_source_triple(rng_key, w, a, r3, e1, e2, rho, u=0., npts_limb=2000, npts_ld=100):
+def mag_extended_source_triple(
+    rng_key, w, a, r3, e1, e2, rho, u=0., npts_limb=2000, npts_ld=100, npts_init_fraction=0.2
+):
     """
     Compute the magnification for an extended source lensed by a triple lens
     using contour integration.
@@ -650,7 +684,7 @@ def mag_extended_source_triple(rng_key, w, a, r3, e1, e2, rho, u=0., npts_limb=2
         float: Total magnification factor.
     """
     images, images_mask, images_parity = _images_of_source_limb(
-        rng_key, w, rho, nlenses=3, a=a, r3=r3, e1=e1, e2=e2, npts=npts_limb, npts_init_fraction=0.3
+        rng_key, w, rho, nlenses=3, a=a, r3=r3, e1=e1, e2=e2, npts=npts_limb, npts_init_fraction=npts_init_fraction
     )
     segments = _get_segments(images, images_mask, images_parity, nlenses=3)
     contours = _get_contours(segments, n_contours=10)

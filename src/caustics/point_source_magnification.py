@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-
 __all__ = [
     "images_point_source_binary",
     "images_point_source_triple",
