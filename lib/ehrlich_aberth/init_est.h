@@ -1,14 +1,5 @@
 #ifndef INIT_EST
 #define INIT_EST
-#include <thrust/complex.h>
-
-#include <cfloat>
-#include <cmath>
-#include <cstdlib>
-
-using complex = thrust::complex<double>;
-namespace ehrlich_aberth_jax
-{
 
 #ifdef __CUDACC__
 #define EHRLICH_ABERTH_JAX_INLINE_OR_DEVICE __host__ __device__
@@ -16,6 +7,15 @@ namespace ehrlich_aberth_jax
 #define THRUST_DEVICE_SYSTEM THRUST_DEVICE_SYSTEM_CPP
 #define EHRLICH_ABERTH_JAX_INLINE_OR_DEVICE inline
 #endif
+
+#include <cfloat>
+#include <cmath>
+#include <cstdlib>
+#include <thrust/complex.h>
+
+using complex = thrust::complex<double>;
+namespace ehrlich_aberth_jax
+{
 
   /* point structure */
   typedef struct

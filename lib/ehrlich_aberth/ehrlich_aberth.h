@@ -5,13 +5,6 @@
 #include <cstdbool>
 #include <cstdio>
 
-#include "horner.h"
-#include "init_est.h"
-
-using complex = complex;
-namespace ehrlich_aberth_jax
-{
-
 #ifdef __CUDACC__
 #define EHRLICH_ABERTH_JAX_INLINE_OR_DEVICE __host__ __device__
 #else
@@ -19,6 +12,12 @@ namespace ehrlich_aberth_jax
 #define EHRLICH_ABERTH_JAX_INLINE_OR_DEVICE inline
 #endif
 
+#include "horner.h"
+#include "init_est.h"
+
+using complex = complex;
+namespace ehrlich_aberth_jax
+{
   /* point convergence structure */
   typedef struct
   {

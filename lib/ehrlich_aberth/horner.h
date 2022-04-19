@@ -4,18 +4,18 @@
 #include <cmath>
 #include <cstdio>
 
-#include "eft.h"
-
-using complex = complex;
-namespace ehrlich_aberth_jax
-{
-
 #ifdef __CUDACC__
 #define EHRLICH_ABERTH_JAX_INLINE_OR_DEVICE __host__ __device__
 #else
 #define THRUST_DEVICE_SYSTEM THRUST_DEVICE_SYSTEM_CPP
 #define EHRLICH_ABERTH_JAX_INLINE_OR_DEVICE inline
 #endif
+
+#include "eft.h"
+
+using complex = complex;
+namespace ehrlich_aberth_jax
+{
 
   /* Global Constants */
   const double EPS = DBL_EPSILON / 2;
