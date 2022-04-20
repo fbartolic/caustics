@@ -271,7 +271,7 @@ def _connection_condition(line1, line2, points_other, max_dist=5e-02):
     """
     Dermine weather two segments should be connected or not. The input to the
     function are two arrays `line1` and `line2` consisting of the last (or first)
-    two points of points of contour segments. We use four criterions to determine 
+    two points of points of contour segments. We use five criterions to determine 
     if the segments should be connected:
         1. The endpoints of `line1` and `line2` are at most `max_dist` apart.
         2. The point of interesection of lines `line1` and `line2` is at most
@@ -280,6 +280,8 @@ def _connection_condition(line1, line2, points_other, max_dist=5e-02):
         4. There are at most 2 points belonging to other segments which are 
         located within a circle between the endpoints of `line1` and `line2` 
         whose center is at the midpoint of the endpoints of the two lines.
+        5. Distance between ending points of `line1` and `line2` is less than
+            the distance between start points.
 
     Args:
         line1(array_like): Size 2 array containing two points in the complex
@@ -320,8 +322,12 @@ def _connection_condition(line1, line2, points_other, max_dist=5e-02):
     mask = jnp.abs(points_other - midpoint) < 0.5*jnp.abs(line2[1] - line1[1])
     cond4 = jnp.sum(mask*jnp.ones(points_other.shape)) <= 2 # if there are 1-2 
     # points in between connect anyway
+
+    # Distance between endpoints of line1 and line2 has to be smaller than the
+    # distance between points where the line begins
+    cond5 = jnp.abs(line1[1] - line2[1]) < jnp.abs(line1[0] - line2[0])
     
-    return cond1 & cond2 & cond3 & cond4
+    return cond1 & cond2 & cond3 & cond4 & cond5
 
 @jit
 def _merge_two_segments(seg1, seg2, tidx1, tidx2, seg_remaining):
@@ -347,24 +353,8 @@ def _merge_two_segments(seg1, seg2, tidx1, tidx2, seg_remaining):
         jnp.all(seg2[0] == 0. + 0j),
     )
 
-    # Case 2 - Tail of segment 1 should be connected to head of segment 2
-    connection = _connection_condition(
-        lax.dynamic_slice_in_dim(seg1[0], tidx1 - 1, 2),
-        lax.dynamic_slice_in_dim(seg2[0], 0, 2)[::-1],
-        seg_remaining[:, 0, :].reshape(-1)
-    )
-    case2 = jnp.logical_or(connection, jnp.abs(seg1[0, tidx1] - seg2[0, 0]) < 1e-05)
-    
-    # Case 3 - Tail of segment 2 should be connected to head of segment 1
-    connection = _connection_condition(
-        lax.dynamic_slice_in_dim(seg2[0], tidx2 - 1, 2),
-        lax.dynamic_slice_in_dim(seg1[0], 0, 2)[::-1],
-        seg_remaining[:, 0, :].reshape(-1)
-    )
-    case3 = jnp.logical_or(connection, jnp.abs(seg1[0, 0] - seg2[0, tidx2]) < 1e-05)
-
-    # Case 4 - Heads of segments 1 and 2 should be connected 
-    case4 = jnp.logical_or(
+    # Case 2 - Heads of segments 1 and 2 should be connected 
+    case2 = jnp.logical_or(
         jnp.abs(seg1[0, 0] - seg2[0, 0]) < 1e-05,
         _connection_condition(
             lax.dynamic_slice_in_dim(seg1[0], 0, 2)[::-1],
@@ -373,8 +363,8 @@ def _merge_two_segments(seg1, seg2, tidx1, tidx2, seg_remaining):
         )
     )
     
-    # Case 5 - Tails of segments 1 and 2 should be connected
-    case5 = jnp.logical_or(
+    # Case 3 - Tails of segments 1 and 2 should be connected
+    case3 = jnp.logical_or(
         jnp.abs(seg1[0, tidx1] - seg2[0, tidx2]) < 1e-05,
         _connection_condition(
             lax.dynamic_slice_in_dim(seg1[0], tidx1 - 1, 2),
@@ -382,7 +372,27 @@ def _merge_two_segments(seg1, seg2, tidx1, tidx2, seg_remaining):
             seg_remaining[:, 0, :].reshape(-1)
         )
     )
+
+    no_hh_or_tt_connections = jnp.logical_not(case2) & jnp.logical_not(case3)
+
+    # Case 4 - Tail of segment 1 should be connected to head of segment 2
+    connection = _connection_condition(
+        lax.dynamic_slice_in_dim(seg1[0], tidx1 - 1, 2),
+        lax.dynamic_slice_in_dim(seg2[0], 0, 2)[::-1],
+        seg_remaining[:, 0, :].reshape(-1)
+    )
+    case4 = jnp.logical_or(connection, jnp.abs(seg1[0, tidx1] - seg2[0, 0]) < 1e-05) &\
+        no_hh_or_tt_connections
     
+    # Case 5 - Tail of segment 2 should be connected to head of segment 1
+    connection = _connection_condition(
+        lax.dynamic_slice_in_dim(seg2[0], tidx2 - 1, 2),
+        lax.dynamic_slice_in_dim(seg1[0], 0, 2)[::-1],
+        seg_remaining[:, 0, :].reshape(-1)
+    )
+    case5 = jnp.logical_or(connection, jnp.abs(seg1[0, 0] - seg2[0, tidx2]) < 1e-05) &\
+        no_hh_or_tt_connections
+
     # Case 6 - None of the above
     case6 = (case1 + case2 + case3 + case4 + case5) == False
     
@@ -391,14 +401,6 @@ def _merge_two_segments(seg1, seg2, tidx1, tidx2, seg_remaining):
         return seg1, tidx1
     
     def branch2(seg1, seg2, tidx1, tidx2):
-        seg_merged = _concatenate_segments(seg1, seg2)
-        return seg_merged, tidx1 + tidx2
-        
-    def branch3(seg1, seg2, tidx1, tidx2):
-        seg_merged = _concatenate_segments(seg2, seg1)
-        return seg_merged, tidx1 + tidx2
-
-    def branch4(seg1, seg2, tidx1, tidx2):
         seg2 = seg2[:, ::-1] # flip
         seg2 = jnp.roll(seg2, -(seg2.shape[-1] - tidx2 - 1), axis=-1)
         seg1_parity = jnp.sign(seg1[1].sum())   
@@ -407,13 +409,21 @@ def _merge_two_segments(seg1, seg2, tidx1, tidx2, seg_remaining):
         seg_merged = _concatenate_segments(seg2, seg1)
         return seg_merged, tidx1 + tidx2
     
-    def branch5(seg1, seg2, tidx1, tidx2):
+    def branch3(seg1, seg2, tidx1, tidx2):
         seg2 = seg2[:, ::-1] # flip
         seg2 = jnp.roll(seg2, -(seg2.shape[-1] - tidx2 - 1), axis=-1)
         seg1_parity = jnp.sign(seg1[1].sum())   
         # seg2 = seg2.at[1].set(-1*seg2[1])
         seg2 = index_update(seg2, 1, -1*seg2[1])
         seg_merged = _concatenate_segments(seg1, seg2)
+        return seg_merged, tidx1 + tidx2
+
+    def branch4(seg1, seg2, tidx1, tidx2):
+        seg_merged = _concatenate_segments(seg1, seg2)
+        return seg_merged, tidx1 + tidx2
+        
+    def branch5(seg1, seg2, tidx1, tidx2):
+        seg_merged = _concatenate_segments(seg2, seg1)
         return seg_merged, tidx1 + tidx2
 
     seg_merged, tidx_merged = lax.switch(
