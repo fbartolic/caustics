@@ -543,47 +543,40 @@ def _brightness_profile(z, rho, w_center, u=0.1, nlenses=2, **kwargs):
         
     r = jnp.abs(w - w_center)/rho
     # See Dominik 1998 for details 
-    B_r = jnp.where(r <= 1., 1. + jnp.sqrt(1. - r**2), 1. - jnp.sqrt(1. - 1./r**2)) 
+    def safe_for_grad_sqrt(x):
+        return jnp.sqrt(jnp.where(x > 0., x, 0.))
+    
+    # See Dominik 1998 for details 
+    B_r = jnp.where(
+        r <= 1.,
+        1 + safe_for_grad_sqrt(1 - r**2),
+        1 - safe_for_grad_sqrt(1 - 1./r**2),
+    )
+
     I = 3./(3. - u)*(u*B_r + 1. - 2.*u)
     return I
     
 @partial(jit, static_argnames=("nlenses", "npts"))
 def _integrate(w_center, rho, contours, u=0., nlenses=2, npts=500, **kwargs):  
-    """
-    Integrate over each closed contour using Green's theorem, taking into account
-    limb-darkening. See Dominik 1998 for details.
-
-    Args:
-        w_center (jnp.complex128): Source star center.
-        rho (float): Source star radius.
-        contours (array_like): Closed contours representing the images.
-        u (float, optional): Linear limb darkening coefficient. Defaults to 0..
-        nlenses (int, optional): Number of lenses. Defaults to 2.
-        npts (int, optional): Number of points used when evaluating the surface
-        brightness for computing the P and Q integrals (See Dominik 1998). 
-        Defaults to 500.
-    """
     # 1D integral in the y direction in the image plane where the limits of 
-    # integration are z0 and (z1, z2) and the integration variable is z2'
-    def P(z0, z1, z2):
+    # integration are Im(z0) and Im(z_limb) 
+    def P(x0, y0, xl, yl):
+        """Integrate from x0 to xl for each yl."""    
         # Construct grid in z2 and evaluate the brightness profile at each point
-        z2p = jnp.linspace(jnp.imag(z0)*jnp.ones_like(z1), z2, npts)
-        integrand = _brightness_profile(z2p*1j + z1, rho, w_center, u=u, nlenses=nlenses, **kwargs)
-
-        # Integrate over z2' using the trapezoidal rule
-        delta_z2 = z2p[1, :] - z2p[0, :]
-        I = jnp.trapz(integrand, x=z2p, axis=0)
+        y = jnp.linspace(y0*jnp.ones_like(xl), yl, npts)
+        integrands = _brightness_profile(xl + 1j*y, rho, w_center, u=u, nlenses=nlenses, **kwargs)
+        # Integrate over y' using the trapezoidal rule
+        I = jnp.trapz(integrands, x=y, axis=0)
         return -0.5*I
 
-    # Similar to P except the integration variable is z1' and z2 is fixed
-    def Q(z0, z1, z2):
+    def Q(x0, y0, xl, yl):
+        """Integrate from y0 to yl for each xl."""
         # Construct grid in z1 and evaluate the brightness profile at each point
-        z1p = jnp.linspace(jnp.real(z0)*jnp.ones_like(z1), z1, npts)
-        integrand = _brightness_profile(z2*1j + z1p, rho, w_center, u=u, nlenses=nlenses, **kwargs)
+        x = jnp.linspace(x0*jnp.ones_like(xl), xl, npts)
+        integrands = _brightness_profile(x + 1j*yl, rho, w_center, u=u, nlenses=nlenses, **kwargs)
 
-        # Integrate over z1' using the trapezoidal rule
-        delta_z1 = z1p[1, :] - z1p[0, :]
-        I = jnp.trapz(integrand, x=z1p, axis=0)
+        # Integrate over x' using the trapezoidal rule
+        I = jnp.trapz(integrands, x=x, axis=0)
         return 0.5*I
 
     # Compute the tail indices for each contour 
@@ -594,33 +587,43 @@ def _integrate(w_center, rho, contours, u=0., nlenses=2, npts=500, **kwargs):
     contours = vmap(lambda idx, contour: contour.at[:, idx + 1].set(contour[:, 0]))(end_points, contours)
     end_points += 1
 
-    # Select k and (k + 1)th elements
-    contours_k = contours
-    contours_kp1 = contours[:, :, 1:]
-    contours_k = vmap(lambda idx, contour: contour.at[0, idx].set(0.))(end_points, contours_k)
-
-    z2_k = jnp.imag(contours_k[:, 0, :])
-    z1_k = jnp.real(contours_k[:, 0, :])
-
-    z2_kp1 = jnp.imag(contours_kp1[:, 0, :])
-    z1_kp1 = jnp.real(contours_kp1[:, 0, :])
-
-    z1_kp1 = jnp.pad(z1_kp1, ((0,0), (0, 1)))
-    z2_kp1 = jnp.pad(z2_kp1, ((0,0), (0, 1))) 
-
     # We choose the centroid of each contour to be lower limit for the P and Q
     # integrals
-    z0 = vmap(lambda idx, contour: contour[0].sum()/(idx + 1))(end_points, contours_k)
+    z0 = vmap(lambda idx, contour: contour[0].sum()/(idx + 1))(end_points, contours)
+    x0, y0 = jnp.real(z0), jnp.imag(z0)
 
-    # Compute magnification for each of the images
-    mag = (vmap(Q)(z0, z1_k, 0.5*(z2_k + z2_kp1)) + vmap(Q)(z0, z1_kp1, 0.5*(z2_k + z2_kp1)))*(z2_kp1 - z2_k) +\
-        (vmap(P)(z0, 0.5*(z1_k + z1_kp1), z2_k) + vmap(P)(z0, 0.5*(z1_k + z1_kp1), z2_kp1))*(z1_kp1 - z1_k)
-    mag = mag.sum(axis=1)/(2*jnp.pi*rho**2)
+    # Select k and (k + 1)th elements
+    contours_k = contours
+    contours_kp1 = jnp.pad(contours[:, :, 1:], ((0,0),(0,0),(0,1)))
+    contours_k = vmap(lambda idx, contour: contour.at[0, idx].set(0.))(end_points, contours_k)
+
+    # Compute the integral using the midpoint rule
+    x_k = jnp.real(contours_k[:, 0, :])
+    y_k = jnp.imag(contours_k[:, 0, :])
+
+    x_kp1 = jnp.real(contours_kp1[:, 0, :])
+    y_kp1 = jnp.imag(contours_kp1[:, 0, :])
+
+    delta_x = x_kp1 - x_k
+    delta_y = y_kp1 - y_k
+
+    Pmid = vmap(P)(x0, y0, 0.5*(x_k + x_kp1), 0.5*(y_k + y_kp1))
+    Qmid = vmap(Q)(x0, y0, 0.5*(x_k + x_kp1), 0.5*(y_k + y_kp1))
+
+    I1 = Pmid*delta_x 
+    I2 = Qmid*delta_y 
+    
+    # # Alternative
+    # I1 = 0.5*(vmap(P)(x0, y0, 0.5*(x_k + x_kp1), y_k) + vmap(P)(x0, y0, 0.5*(x_k + x_kp1), y_kp1))*delta_x
+    # I2 = 0.5*(vmap(Q)(x0, y0, x_k, 0.5*(y_k + y_kp1)) + vmap(Q)(x0, y0, x_kp1, 0.5*(y_k + y_kp1)))*delta_y
+
+    mag = jnp.sum(I1 + I2, axis=1)/(np.pi*rho**2)
     parity = jnp.sign(jnp.real(contours[:, 1, 0]))
 
     # sum magnifications for each image, taking into account the parity of each 
     # image
-    return jnp.abs(mag*parity).sum() 
+    return jnp.abs(mag*parity).sum()    
+
 
 @partial(jit, static_argnames=("npts_limb", "npts_ld", "npts_init_fraction", "debug"))
 def mag_extended_source_binary(
