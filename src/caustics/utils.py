@@ -6,15 +6,13 @@ __all__ = [
     "first_zero",
     "min_zero_avoiding",
     "max_zero_avoiding",
-    "ang_dist",
-    "ang_dist_diff",
-    "add_angles",
-    "sub_angles",
+    "mean_zero_avoiding",
     "sparse_argsort",
+    "simpson_quadrature"
 ]
 
 import jax.numpy as jnp
-from jax import jit, vmap
+from jax import jit
 
 
 @jit
@@ -28,7 +26,6 @@ def last_nonzero(x):
 @jit
 def first_zero(x):
     return (x == 0.).argmax(axis=0)
-
 
 @jit
 def index_update(X, idx, x):
@@ -59,38 +56,20 @@ def max_zero_avoiding(x):
     return jnp.where(cond, -min_zero_avoiding(jnp.abs(x)), max_x)
 
 @jit
-def ang_dist_diff(theta):
-    """
-    Angular distance between consecutive points for a 1D array. Last point of
-    the output array is the distance between first and last point.
-    """
-    theta1 = theta
-    theta2 = jnp.concatenate([theta[1:], jnp.atleast_1d(theta1[0])])
-    return vmap(ang_dist)(theta1, theta2)
-
-
-@jit
-def add_angles(a, b):
-    """a + b"""
-    cos_apb = jnp.cos(a) * jnp.cos(b) - jnp.sin(a) * jnp.sin(b)
-    sin_apb = jnp.sin(a) * jnp.cos(b) + jnp.cos(a) * jnp.sin(b)
-    return jnp.arctan2(sin_apb, cos_apb)
-
-
-@jit
-def sub_angles(a, b):
-    """a - b"""
-    cos_amb = jnp.cos(a) * jnp.cos(b) + jnp.sin(a) * jnp.sin(b)
-    sin_amb = jnp.sin(a) * jnp.cos(b) - jnp.cos(a) * jnp.sin(b)
-    return jnp.arctan2(sin_amb, cos_amb)
-
-@jit
-def ang_dist(theta1, theta2):
-    """
-    Smallest separation between two angles.
-    """
-    return jnp.abs(sub_angles(theta1, theta2))
+def mean_zero_avoiding(x):
+    mask = x == 0.
+    return jnp.nanmean(jnp.where(mask, jnp.nan, x))
 
 @jit
 def sparse_argsort(a):
     return jnp.where(a != 0, a, jnp.nan).argsort()
+
+@jit
+def simpson_quadrature(x, y):
+    """
+    Compute an integral using Simpson's 1/3 rule assuming that x is uniformly
+    distributed. `len(x)` has to be an odd number.
+    """
+    # len(x) must be odd
+    h = (x[-1] - x[0]) / (len(x) - 1)
+    return h/3.*jnp.sum(y[0:-1:2] + 4*y[1::2] + y[2::2], axis=0)
