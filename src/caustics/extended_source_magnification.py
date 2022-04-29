@@ -8,6 +8,7 @@ __all__ = [
 ]
 
 from functools import partial
+from tkinter import W
 
 import numpy as np
 import jax.numpy as jnp
@@ -51,18 +52,17 @@ def _inverse_transform_sampling(key, xp, fp, n_samples=1000):
     inv_cdf = jnp.interp(r, cum_values, xp)
     return inv_cdf
 
-@partial(jit, static_argnames=("nlenses", "npts", "npts_init_fraction", "compensated"))
+@partial(jit, static_argnames=("nlenses", "npts", "npts_init", "compensated"))
 def _images_of_source_limb(
-    key, w_center, rho, nlenses=2, npts=1500, npts_init_fraction=0.2, compensated=False, **kwargs
+    w_center, rho, nlenses=2, npts=1000, npts_init=250, compensated=False, **kwargs
 ):
     """
     Compute the images of a sequence of points on the limb of the source star.
     We use inverse transform sampling to get a higher density of points where
     the gradient in the magnifcation is large (at caustic crossings).
     """
-    npts_init, npts_dense = int(npts_init_fraction*npts), int((1. - npts_init_fraction)*npts)
-
-    theta_init = jnp.linspace(-np.pi, np.pi, npts_init)
+    theta_init = jnp.linspace(-np.pi, np.pi, npts_init - 1, endpoint=False)
+    theta_init = jnp.pad(theta_init, (0, 1), constant_values=np.pi - 1e-05)
     x = rho * jnp.cos(theta_init) + jnp.real(w_center)
     y = rho * jnp.sin(theta_init) + jnp.imag(w_center)
     w_init = x + 1j*y
@@ -85,8 +85,19 @@ def _images_of_source_limb(
     window = jsp.stats.norm.pdf(jnp.linspace(-3, 3, window_size))
     conv = lambda x: jnp.convolve(x, window, mode='same')
     pdf = conv(jnp.abs(jnp.gradient(mag_init)))
+    key = random.PRNGKey(42)
     theta_dense = _inverse_transform_sampling(
-        key, theta_init, pdf, n_samples=npts_dense)
+        key, theta_init, pdf, n_samples=npts
+    ).sort()
+    
+    # Make sure that there are no exact duplicate values in theta_dense and that
+    # no value is common with theta_init
+    mask_duplicate = jnp.ones(len(theta_dense), dtype=bool)
+    mask_duplicate = mask_duplicate.at[jnp.unique(theta_dense, return_index=True, size=len(theta_dense))[1]].set(False)
+    mask_common = jnp.isin(theta_dense, theta_init, assume_unique=True)
+    mask = jnp.logical_or(mask_duplicate, mask_common)
+    theta_dense += mask*random.uniform(key, theta_dense.shape, maxval=1e-05) # small perturbation
+    
     x = rho * jnp.cos(theta_dense) + jnp.real(w_center)
     y = rho * jnp.sin(theta_dense) + jnp.imag(w_center)
     w_dense = x + 1j*y
@@ -97,12 +108,14 @@ def _images_of_source_limb(
     
     # Combine pts
     theta = jnp.hstack([theta_init, theta_dense])
+    
     sorted_idcs = jnp.argsort(theta)
     images = jnp.hstack([images_init, images_dense])[:, sorted_idcs]
     mask = jnp.hstack([mask_init, mask_dense])[:, sorted_idcs]
     parity = jnp.sign(jnp.hstack([det_init, det_dense]))[:, sorted_idcs]
 
     return images, mask, parity
+
 
 
 @partial(jit, backend='cpu')
@@ -287,18 +300,16 @@ def _connection_condition(line1, line2, max_dist=1e-01):
     Dermine weather two segments should be connected or not. The input to the
     function are two arrays `line1` and `line2` consisting of the last (or first)
     two points of points of contour segments. `line1` and `line2` each consist
-    of a starting point and an endpoint (in that order).We use five criterions 
+    of a starting point and an endpoint (in that order). We use four criterions 
     to determine if the segments should be connected:
-
-        1. The endpoints of `line1` and `line2` are at most `max_dist` apart.
-        2. The point of interesection of lines `line1` and `line2` is at most
-        `max_dist` away from the endpoints of `line1` and `line2`.
-        3. The angle between lines `line1` and `line2` is greater than 90 degrees.
-        4. If we divide the image plane into two half-planes by forming a line
+        1. Distance between the endpoints of `line1` and `line2` is less than
+        `max_dist`.
+        2. The angle between lines `line1` and `line2` is greater than 90 degrees.
+        3. If we divide the image plane into two half-planes by forming a line
         passing throught the starting point of `line1` and the starting point 
         of `line2`, the endpoints of `line1` and `line2` must belong to the same
         half-plane.
-        5. Distance between ending points of `line1` and `line2` is less than
+        4. Distance between ending points of `line1` and `line2` is less than
             the distance between start points.
 
     Args:
@@ -317,6 +328,9 @@ def _connection_condition(line1, line2, max_dist=1e-01):
     x2, y2 = jnp.real(line1[1]), jnp.imag(line1[1])
     x3, y3 = jnp.real(line2[0]), jnp.imag(line2[0])
     x4, y4 = jnp.real(line2[1]), jnp.imag(line2[1])
+
+    dist = jnp.abs(line1[1] - line2[1]) 
+    cond1 = dist < max_dist
     
     # Intersection of two lines
     D = (x1 - x2)*(y3 - y4) - (y1 - y2)*(x3 - x4)
@@ -324,31 +338,27 @@ def _connection_condition(line1, line2, max_dist=1e-01):
     py = ((x1*y2 - y1*x2)*(y3 - y4) - (y1 - y2)*(x3*y4 - y3*x4))/D
     p = px + 1j*py
     
-    # Require that z and w are close and that the intersection point is roughly equidistant
-    # from z and w
-    cond1 = jnp.abs(line1[1] - line2[1]) < max_dist
-    cond2 = (jnp.abs(line1[1] - p) < max_dist) & (jnp.abs(line2[1] - p) < max_dist) 
-
     # Angle between two vectors
     vec1 = (line1[1] - line1[0])/jnp.abs(line1[1] - line1[0])
     vec2 = (line2[1] - line2[0])/jnp.abs(line2[1] - line2[0])
     alpha = jnp.arccos(jnp.real(vec1)*jnp.real(vec2) + jnp.imag(vec1)*jnp.imag(vec2))
-    cond3 = jnp.rad2deg(alpha) > 90.0
+    cond2 = jnp.rad2deg(alpha) > 90.0
 
     # Eq. of a line through points (x1, y1), (x3, y3)
     y = lambda x: y1 + (y3 - y1)/(x3 - x1)*(x - x1)
 
     # Check if points (x2, y2) and (x4, y4) are in the same half-plane
-    cond4 = jnp.logical_xor(y2 > y(x2), y4 > y(x4)) == False
+    cond3 = jnp.logical_xor(y2 > y(x2), y4 > y(x4)) == False
 
     # Distance between endpoints of line1 and line2 has to be smaller than the
     # distance between points where the line begins
-    cond5 = jnp.abs(line1[1] - line2[1]) < jnp.abs(line1[0] - line2[0])
+    cond4 = jnp.abs(line1[1] - line2[1]) < jnp.abs(line1[0] - line2[0])
     
-    return cond1 & cond2 & cond3 & cond4 & cond5
+    return cond1 & cond2 & cond3 & cond4
+
 
 @jit
-def _merge_two_segments(seg1, seg2, tidx1, tidx2):
+def _merge_two_segments(seg1, seg2, tidx1, tidx2, ctype):
     """
     Given two segments seg1 and seg2, merge them if the condition for merging
     is satisfied, while keeping track of the parity of each segment.
@@ -358,72 +368,15 @@ def _merge_two_segments(seg1, seg2, tidx1, tidx2):
         seg2 (array_like): Second segment. 
         tidx1 (int): Index specifying the tail of the first segment.
         tidx2 (int): Index specifying the tail of the second segment.
+        ctype (int): Type of connection. 0 = T-H, 1 = H-T, 2 = H-H,
+        3 = T-T.
 
     Returns:
-        (array_like, tidx): The merged segment and the tail index of the merged
-            segment. If the merging condition is not satisfied the function 
-            returns (`seg1, tidx`). 
+        (array_like, int, bool): The merged segment, the index of the tail of
+            the merged segment, and a boolean indicating if the merging was 
+            sucessful. If the merging condition is not satisfied the function 
+            returns (`seg1, tidx1`, `False`). 
     """
-    # Evaluate TH, HT, HH, and TT distances
-    dist_th = jnp.abs(seg1[0, tidx1] - seg2[0, 0]) 
-    dist_ht = jnp.abs(seg1[0, 0] - seg2[0, tidx2]) 
-    dist_hh = jnp.abs(seg1[0, 0] - seg2[0, 0]) 
-    dist_tt = jnp.abs(seg1[0, tidx1] - seg2[0, tidx2]) 
-
-    # Evaluate connection conditions for each of the 4 possible connections
-    cc_th = _connection_condition(
-        lax.dynamic_slice_in_dim(seg1[0], tidx1 - 1, 2),
-        lax.dynamic_slice_in_dim(seg2[0], 0, 2)[::-1],
-    )
-    cc_ht = _connection_condition(
-        lax.dynamic_slice_in_dim(seg2[0], tidx2 - 1, 2),
-        lax.dynamic_slice_in_dim(seg1[0], 0, 2)[::-1],
-    )
-    cc_tt = _connection_condition(
-        lax.dynamic_slice_in_dim(seg1[0], tidx1 - 1, 2),
-        lax.dynamic_slice_in_dim(seg2[0], tidx2 - 1, 2),
-    )
-    cc_hh = _connection_condition(
-        lax.dynamic_slice_in_dim(seg1[0], 0, 2)[::-1],
-        lax.dynamic_slice_in_dim(seg2[0], 0, 2)[::-1],
-    )
-
-    # Evaluate conditions for all possible cases
-
-    # Case 1: Either of the two segments is all zeros
-    case1 = jnp.all(seg1[0] == 0. + 0j) | jnp.all(seg2[0] == 0. + 0j)
-
-    # Case 2: Short range TH connection
-    case2 = (dist_th < 1e-05) & ~case1
-
-    # Case 3: Short range HT connection
-    case3 = (dist_ht < 1e-05) & ~case1 & ~case2
-
-    # Case 4: Short range HH connection
-    case4 = (dist_hh < 1e-05) & ~case1 & ~case2 & ~case3
-
-    # Case 5: Short range TT connection
-    case5 = (dist_tt < 1e-05) & ~case1 & ~case2 & ~case3 & ~case4
-
-    # Case 6: Long range HH connection 
-    case6 = cc_hh & ~case1 & ~case2 & ~case3 & ~case4 & ~case5
-
-    # Case 7: Long range TT connection 
-    case7 = cc_tt & ~case1 & ~case2 & ~case3 & ~case4 & ~case5 & ~case6
-
-    # Case 8: Long range TH connection
-    case8 = cc_th & ~case1 & ~case2 & ~case3 & ~case4 & ~case5 & ~case6 & ~case7
-
-    # Case 9: Long range HT connection
-    case9 = cc_ht & ~case1 & ~case2 & ~case3 & ~case4 & ~case5 & ~case6 & ~case7 & ~case8 
-
-    # Case 10: None of the above
-    case10 = ~case1 & ~case2 & ~case3 & ~case4 & ~case5 & ~case6 & ~case7 & ~case8 & ~case9
-
-    # Possible output functions, some shared by multiple cases
-    def return_seg1(seg1, seg2, tidx1, tidx2):
-        return seg1, tidx1
-    
     def hh_connection(seg1, seg2, tidx1, tidx2):
         seg2 = seg2[:, ::-1] # flip
         seg2 = jnp.roll(seg2, -(seg2.shape[-1] - tidx2 - 1), axis=-1)
@@ -431,7 +384,7 @@ def _merge_two_segments(seg1, seg2, tidx1, tidx2):
         # seg2 = seg2.at[1].set(-1*seg2[1])
         seg2 = index_update(seg2, 1, -1*seg2[1])
         seg_merged = _concatenate_segments(seg2, seg1)
-        return seg_merged, tidx1 + tidx2 + 1
+        return seg_merged, tidx1 + tidx2 + 1, True
     
     def tt_connection(seg1, seg2, tidx1, tidx2):
         seg2 = seg2[:, ::-1] # flip
@@ -440,41 +393,80 @@ def _merge_two_segments(seg1, seg2, tidx1, tidx2):
         # seg2 = seg2.at[1].set(-1*seg2[1])
         seg2 = index_update(seg2, 1, -1*seg2[1])
         seg_merged = _concatenate_segments(seg1, seg2)
-        return seg_merged, tidx1 + tidx2 + 1
+        return seg_merged, tidx1 + tidx2 + 1, True
 
     def th_connection(seg1, seg2, tidx1, tidx2):
         seg_merged = _concatenate_segments(seg1, seg2)
-        return seg_merged, tidx1 + tidx2 + 1
+        return seg_merged, tidx1 + tidx2 + 1, True
         
     def ht_connection(seg1, seg2, tidx1, tidx2):
         seg_merged = _concatenate_segments(seg2, seg1)
-        return seg_merged, tidx1 + tidx2 + 1
+        return seg_merged, tidx1 + tidx2 + 1, True
 
-    case_idx = jnp.argmax(
-        jnp.array(
-            [case1, case2, case3, case4, case5, case6, case7, case8, case9, case10]
-        )
-    )
-    branches = [
-        return_seg1, th_connection, ht_connection, hh_connection, tt_connection,
-        hh_connection, tt_connection, th_connection, ht_connection, return_seg1
-    ]
 
-    seg_merged, tidx_merged = lax.switch(
-        case_idx,
-        branches,
-        seg1, seg2, tidx1, tidx2
-    )
+    def case1(seg1, seg2, tidx1, tidx2):
+        dist_th = jnp.abs(seg1[0, tidx1] - seg2[0, 0]) 
+        cond = jnp.logical_or(_connection_condition(
+                lax.dynamic_slice_in_dim(seg1[0], tidx1 - 1, 2),
+                lax.dynamic_slice_in_dim(seg2[0], 0, 2)[::-1],
+            ), dist_th < 1e-05)
+        return lax.cond(
+            cond,
+            th_connection,
+            lambda *args: (seg1, tidx1, False),
+            seg1, seg2, tidx1, tidx2
+        ) 
+
     
-    return seg_merged, tidx_merged 
+    def case2(seg1, seg2, tidx1, tidx2):
+        dist_ht = jnp.abs(seg1[0, 0] - seg2[0, tidx2]) 
+        cond = jnp.logical_or(_connection_condition(
+            lax.dynamic_slice_in_dim(seg2[0], tidx2 - 1, 2),
+            lax.dynamic_slice_in_dim(seg1[0], 0, 2)[::-1],
+        ), dist_ht < 1e-05)
+        return lax.cond(
+            cond,
+            ht_connection,
+            lambda *args: (seg1, tidx1, False),
+            seg1, seg2, tidx1, tidx2
+        ) 
 
 
-@jit
-def _get_segment_length(segment, tail_idx):
-    """Get the physical length of a segment."""
-    diff = jnp.diff(segment[0])
-    diff = diff.at[tail_idx].set(0.)
-    return jnp.abs(diff).sum()
+    def case3(seg1, seg2, tidx1, tidx2):
+        dist_hh = jnp.abs(seg1[0, 0] - seg2[0, 0]) 
+        cond = jnp.logical_or(_connection_condition(
+            lax.dynamic_slice_in_dim(seg1[0], 0, 2)[::-1],
+            lax.dynamic_slice_in_dim(seg2[0], 0, 2)[::-1],
+        ), dist_hh < 1e-05)
+        return lax.cond(
+            cond,
+            hh_connection,
+            lambda *args: (seg1, tidx1, False),
+            seg1, seg2, tidx1, tidx2
+        ) 
+
+
+    def case4(seg1, seg2, tidx1, tidx2):
+        dist_tt = jnp.abs(seg1[0, tidx1] - seg2[0, tidx2]) 
+        cond = jnp.logical_or(_connection_condition(
+            lax.dynamic_slice_in_dim(seg1[0], tidx1 - 1, 2),
+            lax.dynamic_slice_in_dim(seg2[0], tidx2 - 1, 2),
+        ), dist_tt < 1e-05)
+        return lax.cond(
+            cond,
+            tt_connection,
+            lambda *args: (seg1, tidx1, False),
+            seg1, seg2, tidx1, tidx2
+        ) 
+
+    seg_merged, tidx_merged, success = lax.switch(
+        ctype,
+        [case1, case2, case3, case4],
+        seg1, seg2, tidx1, tidx2,
+    )
+
+    return success, seg_merged, tidx_merged
+
 
 @jit
 def _merge_open_segments(segments, mask_closed):
@@ -487,61 +479,135 @@ def _merge_open_segments(segments, mask_closed):
     closed_segments = closed_segments[sorted_idcs(closed_segments)] # sort 
     open_segments = jnp.logical_not(mask_closed)[:, None, None]*segments
 
-    # Sort open segments such that the shortest segments appear first
-    segment_lengths = vmap(_get_segment_length)(open_segments, tail_idcs)
-    _idcs = sparse_argsort(segment_lengths)
-    open_segments, tail_idcs = open_segments[_idcs], tail_idcs[_idcs] 
+    # Sort such that nonzero segments are first in order
+    sorted_idcs = jnp.argsort(jnp.abs(open_segments[:, 0, 0]))[::-1]
+    open_segments, tail_idcs = open_segments[sorted_idcs], tail_idcs[sorted_idcs]
     
     # Merge all open segments: start by selecting 0th open segment and then
     # sequantially merge it with other ones until a closed segment is formed
     n_remaining = segments.shape[0] - 1
     idcs = jnp.arange(0, n_remaining)
     
-    # Repeat loop three times, each time the nr. of open segments within a contour
-    # decreases by 2 so this will fail if there are > 7 open segments within a contour
-    idcs = jnp.concatenate([idcs, idcs, idcs])
-    
-    def body_fn(carry, idx):
-        seg_carry, tidx_carry, open_segments, tidcs = carry 
-        seg_other, tidx_other = open_segments[idx], tidcs[idx]
-                
-        # Merge segment carried over from previous iteration with the other segment. 
-        # If the merging condition
-        # isn't satisfied, the function returns the first argument. 
-        seg_carry_new, tidx_carry_new = _merge_two_segments(
-            seg_carry, seg_other, tidx_carry, tidx_other, 
+    def body_fn(carry, idx_dummy):
+        # Get the current segment, the index of its tail and all the other
+        # open segments and their tail indices from previous iteration
+        seg_current, tidx_current, open_segments, tidcs = carry 
+
+        # Compute all T-H, H-T, H-H, T-T distances between the current segment
+        # and all other open segments 
+        dist_th = jnp.abs(seg_current[0, tidx_current] - open_segments[:, 0, 0])
+        dist_ht = vmap(
+            lambda seg, tidx: jnp.abs(seg_current[0, 0] - seg[0, tidx])
+        )(open_segments, tidcs)
+        dist_hh = jnp.abs(seg_current[0, 0] - open_segments[:, 0, 0])
+        dist_tt = vmap(
+            lambda seg, tidx: jnp.abs(seg_current[0, tidx_current] - seg[0, tidx])
+        )(open_segments, tidcs)
+
+        distances = jnp.stack([dist_th, dist_ht, dist_hh, dist_tt])
+
+        # Get the connection type and the index of the "closest" segment, the 
+        # second closest segment and so on
+        ctype1, idx1 = jnp.unravel_index(
+            jnp.argsort(distances.reshape(-1))[0], distances.shape
         )
-        
+        ctype2, idx2 = jnp.unravel_index(
+            jnp.argsort(distances.reshape(-1))[1], distances.shape
+        )
+        ctype3, idx3 = jnp.unravel_index(
+            jnp.argsort(distances.reshape(-1))[2], distances.shape
+        )
+        ctype4, idx4 = jnp.unravel_index(
+            jnp.argsort(distances.reshape(-1))[3], distances.shape
+        )
+
+        seg1, tidx1 = open_segments[idx1], tidcs[idx1]
+        seg2, tidx2 = open_segments[idx2], tidcs[idx2]
+        seg3, tidx3 = open_segments[idx3], tidcs[idx3]
+        seg4, tidx4 = open_segments[idx4], tidcs[idx4]
+
+        # First merge attempt
+        success1, seg_current_new, tidx_current_new = lax.cond(
+            jnp.all(seg1[0] == 0. + 0j),
+            lambda *args: (True, seg_current, tidx_current),
+            _merge_two_segments,
+            seg_current, seg1, tidx_current, tidx1, ctype1,
+        )
+
         # Zero out the other segment if merge was successfull, otherwise do nothing
-        val = jnp.where(
-            tidx_carry_new > tidx_carry, 
-            jnp.zeros_like(open_segments[0]),
-            open_segments[idx]
+        open_segments = open_segments.at[idx1].set(
+            jnp.where(
+                success1,
+                jnp.zeros_like(open_segments[0]),
+                open_segments[idx1]
+            )
         )
-        open_segments = open_segments.at[idx].set(val)
-        
-        return (seg_carry_new, tidx_carry_new, open_segments, tidcs), 0.
+
+        # Second merge attempt 
+        success2, seg_current_new, tidx_current_new = lax.cond(
+            jnp.logical_or(success1, jnp.all(seg2[0] == 0. + 0j)),
+            lambda *args: (True, seg_current_new, tidx_current_new),
+            _merge_two_segments,
+            seg_current, seg2, tidx_current, tidx2, ctype2,
+        )
+
+        open_segments = open_segments.at[idx2].set(
+            jnp.where(
+                ~success1 & success2,
+                jnp.zeros_like(open_segments[0]),
+                open_segments[idx2]
+            )
+        )
+
+        # Third merge attempt 
+        success3, seg_current_new, tidx_current_new = lax.cond(
+            jnp.logical_or(success2, jnp.all(seg3[0] == 0. + 0j)),
+            lambda *args: (True, seg_current_new, tidx_current_new),
+            _merge_two_segments,
+            seg_current, seg3, tidx_current, tidx3, ctype3,
+        )
+
+        open_segments = open_segments.at[idx3].set(
+            jnp.where(
+                ~success1 & ~success2,
+                jnp.zeros_like(open_segments[0]),
+                open_segments[idx3]
+            )
+        )
+
+        # Fourth merge attempt 
+        success4, seg_current_new, tidx_current_new = lax.cond(
+            jnp.logical_or(success3, jnp.all(seg4[0] == 0. + 0j)),
+            lambda *args: (True, seg_current_new, tidx_current_new),
+            _merge_two_segments,
+            seg_current, seg4, tidx_current, tidx4, ctype4,
+        )
+
+        open_segments = open_segments.at[idx4].set(
+            jnp.where(
+                ~success1 & ~success2 & ~success3,
+                jnp.zeros_like(open_segments[0]),
+                open_segments[idx4]
+            )
+        )
+ 
+                
+        return (seg_current_new, tidx_current_new, open_segments, tidcs), 0.
     
     init = (open_segments[0], tail_idcs[0], open_segments[1:], tail_idcs[1:])
     carry, _ = lax.scan(body_fn, init, idcs)
-    seg_merged, tail_idx_merged, open_segments, tail_idcs = carry 
+    seg_merged, tidx_merged, open_segments, tail_idcs = carry 
     
     # Store the merged closed segment 
     closed_segments = closed_segments.at[-1].set(seg_merged)
     
-    # Repeat the procedure once again
-    seg_lengths = vmap(_get_segment_length)(open_segments, tail_idcs)
-    _idcs = sparse_argsort(seg_lengths)
-    open_segments, tail_idcs = open_segments[_idcs], tail_idcs[_idcs]
-
     # The remaining number of open segments 
     n_remaining -= 2 # previous run used up at least 2 segments
     idcs = jnp.arange(0, n_remaining)
-    idcs = jnp.concatenate([idcs, idcs, idcs])
-    
+        
     init = (open_segments[0], tail_idcs[0], open_segments[1:], tail_idcs[1:])
     carry, _ = lax.scan(body_fn, init,  idcs)
-    seg_merged, tail_idx_merged, open_segments, tail_idcs = carry
+    seg_merged, tidx_merged, open_segments, tail_idcs = carry
 
     # Store the second merged contour 
     closed_segments = closed_segments.at[-2].set(seg_merged)
@@ -570,7 +636,7 @@ def _get_contours(segments, segments_are_closed, n_contours=5):
     
     contours = lax.cond(
         segments_are_closed,
-        lambda a, b: segments,
+        lambda *args: segments,
         _merge_open_segments,
         segments,
         mask_closed
@@ -775,7 +841,7 @@ def _integrate(
         "outer_integration_rule"
         ))
 def mag_extended_source_binary(
-    rng_key, w, a, e1, rho, u=0., 
+    w, a, e1, rho, u=0., 
     npts_limb=1000, npts_ld=301, 
     npts_init_fraction=0.2, inner_integration_rule="trapezoidal", 
     outer_integration_rule="midpoint"
@@ -785,9 +851,6 @@ def mag_extended_source_binary(
     using contour integration.
 
     Args:
-        rng_key (jax PRNG key): PRNG key which is used in the method for 
-            determining optimal locations on the limb of the source for 
-            computing the images.
         w (jnp.complex128): Center of the source in the lens plane.
         a (float): Half the separation between the two lenses. We use the
             convention where both lenses are located on the real line with
@@ -797,9 +860,8 @@ def mag_extended_source_binary(
         rho (float): Source radius in Einstein radii. 
         u (float, optional): Linear limb darkening coefficient. Defaults to 0..
         npts_limb (int, optional): Total number of points on the source limb for
-            which we evaluate the images This is a key input to the method which
-            determines the accuracy of the magnification calculation. Defaults 
-            to 2000.
+            which we evaluate the images. This will determine the accuracy of
+            the magnification calculation. 
         npts_ld (int, optional): Number of points at which the stellar 
             brightness function is evaluated when computing the integrals P and
             Q defined in Dominik 1998. Defaults to 100.
@@ -808,7 +870,7 @@ def mag_extended_source_binary(
         float: Total magnification factor.
     """
     images, images_mask, images_parity = _images_of_source_limb(
-        rng_key, w, rho, nlenses=2, a=a, e1=e1, npts=npts_limb, npts_init_fraction=npts_init_fraction
+         w, rho, nlenses=2, a=a, e1=e1, npts=npts_limb, npts_init=250
     )
     segments, cond_closed = _get_segments(images, images_mask, images_parity, nlenses=2)
     contours = _get_contours(segments, cond_closed, n_contours=5)
@@ -828,7 +890,7 @@ def mag_extended_source_binary(
         "outer_integration_rule"
         ))
 def mag_extended_source_triple(
-    rng_key, w, a, r3, e1, e2, rho, u=0., npts_limb=1000, npts_ld=301, npts_init_fraction=0.1,
+    w, a, r3, e1, e2, rho, u=0., npts_limb=1000, npts_ld=301, 
      inner_integration_rule="trapezoidal", 
     outer_integration_rule="midpoint"
 
@@ -838,9 +900,6 @@ def mag_extended_source_triple(
     using contour integration.
 
     Args:
-        rng_key (jax PRNG key): PRNG key which is used in the method for 
-            determining optimal locations on the limb of the source for 
-            computing the images.
         w (jnp.complex128): Center of the source in the lens plane.
         a (float): Half the separation between the first two lenses located on
             the real line with r1 = a and r2 = -a.
@@ -861,8 +920,7 @@ def mag_extended_source_triple(
         float: Total magnification factor.
     """
     images, images_mask, images_parity = _images_of_source_limb(
-        rng_key, w, rho, nlenses=3, a=a, r3=r3, e1=e1, e2=e2, npts=npts_limb, 
-        npts_init_fraction=npts_init_fraction
+         w, rho, nlenses=3, a=a, r3=r3, e1=e1, e2=e2, npts=npts_limb, npts_init=250
     )
     segments = _get_segments(images, images_mask, images_parity, nlenses=3)
     contours = _get_contours(segments, n_contours=10)
