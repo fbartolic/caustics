@@ -625,6 +625,11 @@ def _get_contours(segments, segments_are_closed, n_contours=5):
             containing the segment points and the parity for each point.
         segments_are_closed (bool): False if not all segments are closed.
         n_contours (int, optional): Final number of contours. Defaults to 5.
+
+    Returns:
+        tuple: A tuple of (contours, parity) where `contours` is an array with
+        shape `(n_contours, n_points)` and parity is an array of shape `n_contours`
+        indicating the parity of each contour.
     """
     # Mask for closed segments
     cond1 = jnp.all(segments[:, 0, :] != 0 + 0j, axis=1)
@@ -633,7 +638,8 @@ def _get_contours(segments, segments_are_closed, n_contours=5):
 
     # Pad segments with zeros to make room for merged segments 
     segments = jnp.pad(segments, ((0,0), (0,0),(0, 3*segments.shape[-1])), constant_values=0.)
-    
+
+    # If the segments are closed do nothing, otherwise run the merging algorithm
     contours = lax.cond(
         segments_are_closed,
         lambda *args: segments,
@@ -642,10 +648,22 @@ def _get_contours(segments, segments_are_closed, n_contours=5):
         mask_closed
     )
 
+    # Sort such that nonempty contours appear first
     sorted_idcs = lambda segments: jnp.argsort(jnp.abs(segments[:, 0, 0]))[::-1]
-    contours = contours[sorted_idcs(contours)] # sort 
+    contours = contours[sorted_idcs(contours)][:n_contours]
 
-    return contours[:n_contours]
+    # Extract per-contour parity values
+    parity = jnp.sign(contours[:, 1, 0])
+    contours = contours[:, 0, :]
+
+    # Set the last point in each contour to be equal to the first point
+    tail_idcs = vmap(last_nonzero)(jnp.abs(contours))
+    contours = vmap(
+        lambda idx, contour: contour.at[idx + 1].set(contour[0])
+    )(tail_idcs, contours)
+    tail_idcs += 1
+
+    return contours, parity
      
 @partial(jit, static_argnames=("nlenses"))
 def _brightness_profile(z, rho, w_center, u=0.1, nlenses=2, **kwargs):
@@ -724,7 +742,7 @@ def _refine_ymid_bisect(x_mid, y_mid, delta_y, w_center, rho, nlenses=2, **kwarg
     
 @partial(jit, static_argnames=("nlenses", "npts", "inner_integration_rule", "outer_integration_rule"))
 def _integrate(
-    w_center, rho, contours, u=0., nlenses=2, npts=301, 
+    w_center, rho, contours, parity, u=0., nlenses=2, npts=301, 
     outer_integration_rule="midpoint", inner_integration_rule="trapezoidal", **kwargs
 ):  
     # Make sure that npts is odd
@@ -762,31 +780,24 @@ def _integrate(
         return 0.5*I
 
     # Compute the tail indices for each contour 
-    end_points = vmap(last_nonzero)(jnp.abs(contours[:, 0, :]))
-
-    # Set the last point in each contour to be equal to the first point
-    end_points = vmap(last_nonzero)(jnp.abs(contours[:, 0, :]))
-    contours = vmap(
-        lambda idx, contour: contour.at[:, idx + 1].set(contour[:, 0])
-    )(end_points, contours)
-    end_points += 1
+    tail_idcs = vmap(last_nonzero)(jnp.abs(contours))
 
     # We choose the centroid of each contour to be lower limit for the P and Q
     # integrals
-    z0 = vmap(lambda idx, contour: contour[0].sum()/(idx + 1))(end_points, contours)
+    z0 = vmap(lambda idx, contour: contour.sum()/(idx + 1))(tail_idcs, contours)
     x0, y0 = jnp.real(z0), jnp.imag(z0)
 
     # Select k and (k + 1)th elements
     contours_k = contours
-    contours_kp1 = jnp.pad(contours[:, :, 1:], ((0,0),(0,0),(0,1)))
-    contours_k = vmap(lambda idx, contour: contour.at[0, idx].set(0.))(end_points, contours_k)
+    contours_kp1 = jnp.pad(contours[:, 1:], ((0,0),(0,1)))
+    contours_k = vmap(lambda idx, contour: contour.at[idx].set(0.))(tail_idcs, contours_k)
 
     # Compute the integral using the midpoint rule
-    x_k = jnp.real(contours_k[:, 0, :])
-    y_k = jnp.imag(contours_k[:, 0, :])
+    x_k = jnp.real(contours_k)
+    y_k = jnp.imag(contours_k)
 
-    x_kp1 = jnp.real(contours_kp1[:, 0, :])
-    y_kp1 = jnp.imag(contours_kp1[:, 0, :])
+    x_kp1 = jnp.real(contours_kp1)
+    y_kp1 = jnp.imag(contours_kp1)
 
     delta_x = x_kp1 - x_k
     delta_y = y_kp1 - y_k
@@ -827,7 +838,6 @@ def _integrate(
         )
    
     mag = jnp.sum(I1 + I2, axis=1)/(np.pi*rho**2)
-    parity = jnp.sign(jnp.real(contours[:, 1, 0]))
 
     # sum magnifications for each image, taking into account the parity of each 
     # image
@@ -873,8 +883,8 @@ def mag_extended_source_binary(
          w, rho, nlenses=2, a=a, e1=e1, npts=npts_limb, npts_init=250
     )
     segments, cond_closed = _get_segments(images, images_mask, images_parity, nlenses=2)
-    contours = _get_contours(segments, cond_closed, n_contours=5)
-    mag = _integrate(w, rho, contours, u=u, nlenses=2, npts=npts_ld, 
+    contours, parity = _get_contours(segments, cond_closed, n_contours=5)
+    mag = _integrate(w, rho, contours, parity, u=u, nlenses=2, npts=npts_ld, 
                      inner_integration_rule=inner_integration_rule, 
                      outer_integration_rule=outer_integration_rule,
                      a=a, e1=e1,
