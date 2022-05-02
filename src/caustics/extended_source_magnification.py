@@ -30,7 +30,8 @@ from .point_source_magnification import (
 
 from jaxopt import Bisection
 
-@partial(jit, static_argnames=('n_samples'))
+
+@partial(jit, static_argnames=("n_samples"))
 def _inverse_transform_sampling(key, xp, fp, n_samples=1000):
     """
     Given function values fp at points xp, return `n_samples` samples from
@@ -40,7 +41,7 @@ def _inverse_transform_sampling(key, xp, fp, n_samples=1000):
         key (jax rng key): JAX PRNG key.
         xp (array_like): points at which fp is evaluated.
         fp (array_like): function values.
-        n_samples (int, optional): Number of samples from the pdf. Defaults to 
+        n_samples (int, optional): Number of samples from the pdf. Defaults to
             1000.
 
     Returns:
@@ -51,6 +52,7 @@ def _inverse_transform_sampling(key, xp, fp, n_samples=1000):
     r = random.uniform(key, (n_samples,))
     inv_cdf = jnp.interp(r, cum_values, xp)
     return inv_cdf
+
 
 @partial(jit, static_argnames=("nlenses", "npts", "npts_init", "compensated"))
 def _images_of_source_limb(
@@ -65,17 +67,26 @@ def _images_of_source_limb(
     theta_init = jnp.pad(theta_init, (0, 1), constant_values=np.pi - 1e-05)
     x = rho * jnp.cos(theta_init) + jnp.real(w_center)
     y = rho * jnp.sin(theta_init) + jnp.imag(w_center)
-    w_init = x + 1j*y
-    
+    w_init = x + 1j * y
+
     if nlenses == 2:
-        get_images = lambda w: images_point_source_binary(w, kwargs['a'], kwargs['e1'], compensated=compensated)
-        get_det = lambda im: lens_eq_jac_det_binary(im, kwargs['a'], kwargs['e1'])
+        get_images = lambda w: images_point_source_binary(
+            w, kwargs["a"], kwargs["e1"], compensated=compensated
+        )
+        get_det = lambda im: lens_eq_jac_det_binary(im, kwargs["a"], kwargs["e1"])
     else:
         get_images = lambda w: images_point_source_triple(
-            w, kwargs['a'], kwargs['r3'], kwargs['e1'], kwargs['e2'], compensated=compensated
+            w,
+            kwargs["a"],
+            kwargs["r3"],
+            kwargs["e1"],
+            kwargs["e2"],
+            compensated=compensated,
         )
-        get_det = lambda im: lens_eq_jac_det_triple(im, kwargs['a'], kwargs['r3'], kwargs['e1'], kwargs['e2'])
-    
+        get_det = lambda im: lens_eq_jac_det_triple(
+            im, kwargs["a"], kwargs["r3"], kwargs["e1"], kwargs["e2"]
+        )
+
     images_init, mask_init = get_images(w_init)
     det_init = get_det(images_init)
     mag_init = jnp.sum((1.0 / jnp.abs(det_init)) * mask_init, axis=0)
@@ -83,32 +94,36 @@ def _images_of_source_limb(
     # Resample around high magnification regions
     window_size = 20
     window = jsp.stats.norm.pdf(jnp.linspace(-3, 3, window_size))
-    conv = lambda x: jnp.convolve(x, window, mode='same')
+    conv = lambda x: jnp.convolve(x, window, mode="same")
     pdf = conv(jnp.abs(jnp.gradient(mag_init)))
     key = random.PRNGKey(42)
     theta_dense = _inverse_transform_sampling(
         key, theta_init, pdf, n_samples=npts
     ).sort()
-    
+
     # Make sure that there are no exact duplicate values in theta_dense and that
     # no value is common with theta_init
     mask_duplicate = jnp.ones(len(theta_dense), dtype=bool)
-    mask_duplicate = mask_duplicate.at[jnp.unique(theta_dense, return_index=True, size=len(theta_dense))[1]].set(False)
+    mask_duplicate = mask_duplicate.at[
+        jnp.unique(theta_dense, return_index=True, size=len(theta_dense))[1]
+    ].set(False)
     mask_common = jnp.isin(theta_dense, theta_init, assume_unique=True)
     mask = jnp.logical_or(mask_duplicate, mask_common)
-    theta_dense += mask*random.uniform(key, theta_dense.shape, maxval=1e-05) # small perturbation
-    
+    theta_dense += mask * random.uniform(
+        key, theta_dense.shape, maxval=1e-05
+    )  # small perturbation
+
     x = rho * jnp.cos(theta_dense) + jnp.real(w_center)
     y = rho * jnp.sin(theta_dense) + jnp.imag(w_center)
-    w_dense = x + 1j*y
+    w_dense = x + 1j * y
 
     # Compute images at points biased towards higher magnification
     images_dense, mask_dense = get_images(w_dense)
     det_dense = get_det(images_dense)
-    
+
     # Combine pts
     theta = jnp.hstack([theta_init, theta_dense])
-    
+
     sorted_idcs = jnp.argsort(theta)
     images = jnp.hstack([images_init, images_dense])[:, sorted_idcs]
     mask = jnp.hstack([mask_init, mask_dense])[:, sorted_idcs]
@@ -117,8 +132,7 @@ def _images_of_source_limb(
     return images, mask, parity
 
 
-
-@partial(jit, backend='cpu')
+@partial(jit, backend="cpu")
 def _linear_sum_assignment(a, b):
     """
     Given 1D arrays a and b, return the indices which specify the permutation of
@@ -126,42 +140,44 @@ def _linear_sum_assignment(a, b):
 
     Args:
         a (array_like): 1D array.
-        b (array_like): 1D array. 
+        b (array_like): 1D array.
 
     Returns:
         array_like: Indices which specify the desired permutation of b.
     """
-    # This is the first guess for a solution but sometimes we get duplicate 
-    # indices so for those values we need to choose the 2nd or 3rd best 
-    # solution. This approach can fail if there are too many elements in b which 
-    # map tothe same element of a but it's good enough for our purposes. For a 
+    # This is the first guess for a solution but sometimes we get duplicate
+    # indices so for those values we need to choose the 2nd or 3rd best
+    # solution. This approach can fail if there are too many elements in b which
+    # map tothe same element of a but it's good enough for our purposes. For a
     # general solution see the Hungarian algorithm/optimal transport algorithms.
-    idcs_initial = jnp.argsort(jnp.abs(b - a[:, None]), axis=1)    
+    idcs_initial = jnp.argsort(jnp.abs(b - a[:, None]), axis=1)
     idcs_final = jnp.repeat(999, len(a))
-    
+
     def f(carry, idcs_initial_row):
         i, idcs_final = carry
         cond1 = jnp.isin(idcs_initial_row[0], jnp.array(idcs_final))
         cond2 = jnp.isin(idcs_initial_row[1], jnp.array(idcs_final))
-        
+
         idx_closest = jnp.where(
-            cond1, jnp.where(cond2, idcs_initial_row[2], idcs_initial_row[1]), idcs_initial_row[0]
+            cond1,
+            jnp.where(cond2, idcs_initial_row[2], idcs_initial_row[1]),
+            idcs_initial_row[0],
         )
         idcs_final = idcs_final.at[i].set(idx_closest)
         return (i + 1, idcs_final), idx_closest
-    
+
     _, res = lax.scan(f, (0, idcs_final), idcs_initial)
-    
+
     return res
 
 
-@partial(jit, backend='cpu') # this function has to be executed on the CPU
+@partial(jit, backend="cpu")  # this function has to be executed on the CPU
 def _permute_images(images, mask_solutions, parity):
     """
     Sequantially permute the images corresponding to points on the source limb
-    starting with the first point such that each point source image is assigned 
+    starting with the first point such that each point source image is assigned
     to the correct curve. This procedure does not differentiate between real
-    and false images, false images are set to zero after the permutation 
+    and false images, false images are set to zero after the permutation
     operation.
     """
     segments = jnp.stack([images, mask_solutions, parity])
@@ -178,74 +194,75 @@ def _permute_images(images, mask_solutions, parity):
 
     # Apply mask
     z, mask_sols, parity = jnp.moveaxis(segments, 1, 0)
-    z = (z*mask_sols).T
-    parity = (parity*mask_sols).T
+    z = (z * mask_sols).T
+    parity = (parity * mask_sols).T
 
     segments = jnp.stack([z, parity])
     return jnp.moveaxis(segments, 0, 1)
+
 
 @partial(jit, static_argnames=("n_parts"))
 def _split_single_segment(segment, n_parts=5):
     """
     Split a single contour segment with shape `(2, npts)` which has at most
-    `n_parts` parts seperated by zeros, split it into `n_parts` segments 
+    `n_parts` parts seperated by zeros, split it into `n_parts` segments
     such that each segment is contiguous.
     """
     npts = segment.shape[1]
     z = segment[0]
-    z_diff = jnp.diff((jnp.abs(z) > 0.).astype(float), prepend=0, append=0)
+    z_diff = jnp.diff((jnp.abs(z) > 0.0).astype(float), prepend=0, append=0)
     z_diff = z_diff.at[-2].set(z_diff[-1])
     z_diff = z_diff[:-1]
-   
-    left_edges = jnp.nonzero(z_diff > 0., size=n_parts)[0]
-    right_edges = jnp.nonzero(z_diff < 0., size=n_parts)[0]
-        
-    # Split into n_parts parts 
+
+    left_edges = jnp.nonzero(z_diff > 0.0, size=n_parts)[0]
+    right_edges = jnp.nonzero(z_diff < 0.0, size=n_parts)[0]
+
+    # Split into n_parts parts
     n = jnp.arange(npts)
     masks = []
     for i in range(n_parts):
         l, r = left_edges[i], right_edges[i]
         masks.append(
-            jnp.where(
-                (l == 0.) & (r ==0.),
-                jnp.zeros(npts),
-                (n >= l) & (n <= r)
-            )
+            jnp.where((l == 0.0) & (r == 0.0), jnp.zeros(npts), (n >= l) & (n <= r))
         )
-            
-    segments_split = jnp.stack(jnp.array([segment*mask for mask in masks]))
-    
+
+    segments_split = jnp.stack(jnp.array([segment * mask for mask in masks]))
+
     return segments_split
 
-@partial(jit, static_argnames=('nr_of_segments'))
+
+@partial(jit, static_argnames=("nr_of_segments"))
 def _process_segments(segments, nr_of_segments=20):
     """
-    Process raw contour segments such that each segment is contigous (meaning 
+    Process raw contour segments such that each segment is contigous (meaning
     that there are no gaps between the segments head and tail) and that the head
-    of the segment is at the 0th index in the array. The resultant number of 
-    segments is in general greater than the number of images and is at most 
+    of the segment is at the 0th index in the array. The resultant number of
+    segments is in general greater than the number of images and is at most
     equal to `nr_of_segments`.
     """
-    # Split segments
+    # Split segments
     segments = jnp.concatenate(vmap(_split_single_segment)(segments))
-    
+
     # Sort segments such that the nonempty segments appear first and shrink array
-    sorted_idcs = jnp.argsort(jnp.any(jnp.abs(segments[:, 0, :]) > 0., axis=1))[::-1]
+    sorted_idcs = jnp.argsort(jnp.any(jnp.abs(segments[:, 0, :]) > 0.0, axis=1))[::-1]
     segments = segments[sorted_idcs]
     segments = segments[:nr_of_segments, :, :]
-    
+
     # Find head of each segment
     head_idcs = vmap(first_nonzero)(jnp.abs(segments[:, 0, :]))
-    
+
     # Roll each segment such that head is at idx 0
-    segments = vmap(lambda segment, head_idx: jnp.roll(segment, -head_idx, axis=-1))(segments, head_idcs)
-    
+    segments = vmap(lambda segment, head_idx: jnp.roll(segment, -head_idx, axis=-1))(
+        segments, head_idcs
+    )
+
     return segments
+
 
 @partial(jit, static_argnames=("nlenses"))
 def _get_segments(images, images_mask, images_parity, nlenses=2):
     """
-    Given the raw images corresponding to a sequence of points on the source 
+    Given the raw images corresponding to a sequence of points on the source
     limb, return a collection of contour segments some open and some closed.
 
     Args:
@@ -256,12 +273,12 @@ def _get_segments(images, images_mask, images_parity, nlenses=2):
 
     Returns:
         tuple: (array_like, bool) Array containing the segments and
-        a boolean variable indicating whether all segments are closed. 
-        The "head" of each segment starts at index 0 and the "tail" index is 
+        a boolean variable indicating whether all segments are closed.
+        The "head" of each segment starts at index 0 and the "tail" index is
         variable depending on the segment.
     """
     n_images = nlenses**2 + 1
-    nr_of_segments = 2*n_images
+    nr_of_segments = 2 * n_images
 
     # Untangle the images
     segments = _permute_images(images, images_mask, images_parity)
@@ -269,11 +286,11 @@ def _get_segments(images, images_mask, images_parity, nlenses=2):
     # Expand size of the array to make room for splitted segments in case there
     # are critical curve crossings
     segments = jnp.pad(
-        segments, ((0, nr_of_segments - segments.shape[0]), (0,0), (0,0))
+        segments, ((0, nr_of_segments - segments.shape[0]), (0, 0), (0, 0))
     )
 
-    # Check if all segments are already closed, if not, do 
-    # extra processing to obtain splitted segments     
+    # Check if all segments are already closed, if not, do
+    # extra processing to obtain splitted segments
     cond1 = jnp.all(segments[:, 0, :] != 0 + 0j, axis=1)
     cond2 = jnp.abs(segments[:, 0, 0] - segments[:, 0, -1]) < 1e-05
     all_closed = jnp.all(jnp.logical_and(cond1, cond2))
@@ -282,11 +299,11 @@ def _get_segments(images, images_mask, images_parity, nlenses=2):
         all_closed,
         lambda _: segments,
         lambda s: _process_segments(s, nr_of_segments=nr_of_segments),
-        segments
+        segments,
     )
 
     return segments, all_closed
-    
+
 
 @jit
 def _concatenate_segments(segment_first, segment_second):
@@ -300,13 +317,13 @@ def _connection_condition(line1, line2, max_dist=1e-01):
     Dermine weather two segments should be connected or not. The input to the
     function are two arrays `line1` and `line2` consisting of the last (or first)
     two points of points of contour segments. `line1` and `line2` each consist
-    of a starting point and an endpoint (in that order). We use four criterions 
+    of a starting point and an endpoint (in that order). We use four criterions
     to determine if the segments should be connected:
         1. Distance between the endpoints of `line1` and `line2` is less than
         `max_dist`.
         2. The angle between lines `line1` and `line2` is greater than 90 degrees.
         3. If we divide the image plane into two half-planes by forming a line
-        passing throught the starting point of `line1` and the starting point 
+        passing throught the starting point of `line1` and the starting point
         of `line2`, the endpoints of `line1` and `line2` must belong to the same
         half-plane.
         4. Distance between ending points of `line1` and `line2` is less than
@@ -317,8 +334,8 @@ def _connection_condition(line1, line2, max_dist=1e-01):
             plane where the second point is the end-point.
         line1(array_like): Size 2 array containing two points in the complex
             plane where the second point is the end-point.
-        max_dist (float, optional): Maximum distance between the ends of the 
-            two segments. If the distance is greater than this value function 
+        max_dist (float, optional): Maximum distance between the ends of the
+            two segments. If the distance is greater than this value function
             return `False`. Defaults to 5e-02.
 
     Returns:
@@ -329,23 +346,25 @@ def _connection_condition(line1, line2, max_dist=1e-01):
     x3, y3 = jnp.real(line2[0]), jnp.imag(line2[0])
     x4, y4 = jnp.real(line2[1]), jnp.imag(line2[1])
 
-    dist = jnp.abs(line1[1] - line2[1]) 
+    dist = jnp.abs(line1[1] - line2[1])
     cond1 = dist < max_dist
-    
+
     # Intersection of two lines
-    D = (x1 - x2)*(y3 - y4) - (y1 - y2)*(x3 - x4)
-    px = ((x1*y2 - y1*x2)*(x3 - x4) - (x1 - x2)*(x3*y4 - y3*x4))/D
-    py = ((x1*y2 - y1*x2)*(y3 - y4) - (y1 - y2)*(x3*y4 - y3*x4))/D
-    p = px + 1j*py
-    
+    D = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
+    px = ((x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4)) / D
+    py = ((x1 * y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3 * y4 - y3 * x4)) / D
+    p = px + 1j * py
+
     # Angle between two vectors
-    vec1 = (line1[1] - line1[0])/jnp.abs(line1[1] - line1[0])
-    vec2 = (line2[1] - line2[0])/jnp.abs(line2[1] - line2[0])
-    alpha = jnp.arccos(jnp.real(vec1)*jnp.real(vec2) + jnp.imag(vec1)*jnp.imag(vec2))
+    vec1 = (line1[1] - line1[0]) / jnp.abs(line1[1] - line1[0])
+    vec2 = (line2[1] - line2[0]) / jnp.abs(line2[1] - line2[0])
+    alpha = jnp.arccos(
+        jnp.real(vec1) * jnp.real(vec2) + jnp.imag(vec1) * jnp.imag(vec2)
+    )
     cond2 = jnp.rad2deg(alpha) > 90.0
 
     # Eq. of a line through points (x1, y1), (x3, y3)
-    y = lambda x: y1 + (y3 - y1)/(x3 - x1)*(x - x1)
+    y = lambda x: y1 + (y3 - y1) / (x3 - x1) * (x - x1)
 
     # Check if points (x2, y2) and (x4, y4) are in the same half-plane
     cond3 = jnp.logical_xor(y2 > y(x2), y4 > y(x4)) == False
@@ -353,7 +372,7 @@ def _connection_condition(line1, line2, max_dist=1e-01):
     # Distance between endpoints of line1 and line2 has to be smaller than the
     # distance between points where the line begins
     cond4 = jnp.abs(line1[1] - line2[1]) < jnp.abs(line1[0] - line2[0])
-    
+
     return cond1 & cond2 & cond3 & cond4
 
 
@@ -365,7 +384,7 @@ def _merge_two_segments(seg1, seg2, tidx1, tidx2, ctype):
 
     Args:
         seg1 (array_like): First segment.
-        seg2 (array_like): Second segment. 
+        seg2 (array_like): Second segment.
         tidx1 (int): Index specifying the tail of the first segment.
         tidx2 (int): Index specifying the tail of the second segment.
         ctype (int): Type of connection. 0 = T-H, 1 = H-T, 2 = H-H,
@@ -373,96 +392,120 @@ def _merge_two_segments(seg1, seg2, tidx1, tidx2, ctype):
 
     Returns:
         (array_like, int, bool): The merged segment, the index of the tail of
-            the merged segment, and a boolean indicating if the merging was 
-            sucessful. If the merging condition is not satisfied the function 
-            returns (`seg1, tidx1`, `False`). 
+            the merged segment, and a boolean indicating if the merging was
+            sucessful. If the merging condition is not satisfied the function
+            returns (`seg1, tidx1`, `False`).
     """
+
     def hh_connection(seg1, seg2, tidx1, tidx2):
-        seg2 = seg2[:, ::-1] # flip
+        seg2 = seg2[:, ::-1]  # flip
         seg2 = jnp.roll(seg2, -(seg2.shape[-1] - tidx2 - 1), axis=-1)
-        seg1_parity = jnp.sign(seg1[1].sum())   
+        seg1_parity = jnp.sign(seg1[1].sum())
         # seg2 = seg2.at[1].set(-1*seg2[1])
-        seg2 = index_update(seg2, 1, -1*seg2[1])
+        seg2 = index_update(seg2, 1, -1 * seg2[1])
         seg_merged = _concatenate_segments(seg2, seg1)
         return seg_merged, tidx1 + tidx2 + 1, True
-    
+
     def tt_connection(seg1, seg2, tidx1, tidx2):
-        seg2 = seg2[:, ::-1] # flip
+        seg2 = seg2[:, ::-1]  # flip
         seg2 = jnp.roll(seg2, -(seg2.shape[-1] - tidx2 - 1), axis=-1)
-        seg1_parity = jnp.sign(seg1[1].sum())   
+        seg1_parity = jnp.sign(seg1[1].sum())
         # seg2 = seg2.at[1].set(-1*seg2[1])
-        seg2 = index_update(seg2, 1, -1*seg2[1])
+        seg2 = index_update(seg2, 1, -1 * seg2[1])
         seg_merged = _concatenate_segments(seg1, seg2)
         return seg_merged, tidx1 + tidx2 + 1, True
 
     def th_connection(seg1, seg2, tidx1, tidx2):
         seg_merged = _concatenate_segments(seg1, seg2)
         return seg_merged, tidx1 + tidx2 + 1, True
-        
+
     def ht_connection(seg1, seg2, tidx1, tidx2):
         seg_merged = _concatenate_segments(seg2, seg1)
         return seg_merged, tidx1 + tidx2 + 1, True
 
-
     def case1(seg1, seg2, tidx1, tidx2):
-        dist_th = jnp.abs(seg1[0, tidx1] - seg2[0, 0]) 
-        cond = jnp.logical_or(_connection_condition(
+        dist_th = jnp.abs(seg1[0, tidx1] - seg2[0, 0])
+        cond = jnp.logical_or(
+            _connection_condition(
                 lax.dynamic_slice_in_dim(seg1[0], tidx1 - 1, 2),
                 lax.dynamic_slice_in_dim(seg2[0], 0, 2)[::-1],
-            ), dist_th < 1e-05)
+            ),
+            dist_th < 1e-05,
+        )
         return lax.cond(
             cond,
             th_connection,
             lambda *args: (seg1, tidx1, False),
-            seg1, seg2, tidx1, tidx2
-        ) 
+            seg1,
+            seg2,
+            tidx1,
+            tidx2,
+        )
 
-    
     def case2(seg1, seg2, tidx1, tidx2):
-        dist_ht = jnp.abs(seg1[0, 0] - seg2[0, tidx2]) 
-        cond = jnp.logical_or(_connection_condition(
-            lax.dynamic_slice_in_dim(seg2[0], tidx2 - 1, 2),
-            lax.dynamic_slice_in_dim(seg1[0], 0, 2)[::-1],
-        ), dist_ht < 1e-05)
+        dist_ht = jnp.abs(seg1[0, 0] - seg2[0, tidx2])
+        cond = jnp.logical_or(
+            _connection_condition(
+                lax.dynamic_slice_in_dim(seg2[0], tidx2 - 1, 2),
+                lax.dynamic_slice_in_dim(seg1[0], 0, 2)[::-1],
+            ),
+            dist_ht < 1e-05,
+        )
         return lax.cond(
             cond,
             ht_connection,
             lambda *args: (seg1, tidx1, False),
-            seg1, seg2, tidx1, tidx2
-        ) 
-
+            seg1,
+            seg2,
+            tidx1,
+            tidx2,
+        )
 
     def case3(seg1, seg2, tidx1, tidx2):
-        dist_hh = jnp.abs(seg1[0, 0] - seg2[0, 0]) 
-        cond = jnp.logical_or(_connection_condition(
-            lax.dynamic_slice_in_dim(seg1[0], 0, 2)[::-1],
-            lax.dynamic_slice_in_dim(seg2[0], 0, 2)[::-1],
-        ), dist_hh < 1e-05)
+        dist_hh = jnp.abs(seg1[0, 0] - seg2[0, 0])
+        cond = jnp.logical_or(
+            _connection_condition(
+                lax.dynamic_slice_in_dim(seg1[0], 0, 2)[::-1],
+                lax.dynamic_slice_in_dim(seg2[0], 0, 2)[::-1],
+            ),
+            dist_hh < 1e-05,
+        )
         return lax.cond(
             cond,
             hh_connection,
             lambda *args: (seg1, tidx1, False),
-            seg1, seg2, tidx1, tidx2
-        ) 
-
+            seg1,
+            seg2,
+            tidx1,
+            tidx2,
+        )
 
     def case4(seg1, seg2, tidx1, tidx2):
-        dist_tt = jnp.abs(seg1[0, tidx1] - seg2[0, tidx2]) 
-        cond = jnp.logical_or(_connection_condition(
-            lax.dynamic_slice_in_dim(seg1[0], tidx1 - 1, 2),
-            lax.dynamic_slice_in_dim(seg2[0], tidx2 - 1, 2),
-        ), dist_tt < 1e-05)
+        dist_tt = jnp.abs(seg1[0, tidx1] - seg2[0, tidx2])
+        cond = jnp.logical_or(
+            _connection_condition(
+                lax.dynamic_slice_in_dim(seg1[0], tidx1 - 1, 2),
+                lax.dynamic_slice_in_dim(seg2[0], tidx2 - 1, 2),
+            ),
+            dist_tt < 1e-05,
+        )
         return lax.cond(
             cond,
             tt_connection,
             lambda *args: (seg1, tidx1, False),
-            seg1, seg2, tidx1, tidx2
-        ) 
+            seg1,
+            seg2,
+            tidx1,
+            tidx2,
+        )
 
     seg_merged, tidx_merged, success = lax.switch(
         ctype,
         [case1, case2, case3, case4],
-        seg1, seg2, tidx1, tidx2,
+        seg1,
+        seg2,
+        tidx1,
+        tidx2,
     )
 
     return success, seg_merged, tidx_merged
@@ -474,31 +517,31 @@ def _merge_open_segments(segments, mask_closed):
     tail_idcs = vmap(last_nonzero)(jnp.abs(segments[:, 0, :]))
 
     # Split segments into closed and open ones
-    closed_segments = mask_closed[:, None, None]*segments
+    closed_segments = mask_closed[:, None, None] * segments
     sorted_idcs = lambda segments: jnp.argsort(jnp.abs(segments[:, 0, 0]))[::-1]
-    closed_segments = closed_segments[sorted_idcs(closed_segments)] # sort 
-    open_segments = jnp.logical_not(mask_closed)[:, None, None]*segments
+    closed_segments = closed_segments[sorted_idcs(closed_segments)]  # sort
+    open_segments = jnp.logical_not(mask_closed)[:, None, None] * segments
 
     # Sort such that nonzero segments are first in order
     sorted_idcs = jnp.argsort(jnp.abs(open_segments[:, 0, 0]))[::-1]
     open_segments, tail_idcs = open_segments[sorted_idcs], tail_idcs[sorted_idcs]
-    
+
     # Merge all open segments: start by selecting 0th open segment and then
     # sequantially merge it with other ones until a closed segment is formed
     n_remaining = segments.shape[0] - 1
     idcs = jnp.arange(0, n_remaining)
-    
+
     def body_fn(carry, idx_dummy):
         # Get the current segment, the index of its tail and all the other
         # open segments and their tail indices from previous iteration
-        seg_current, tidx_current, open_segments, tidcs = carry 
+        seg_current, tidx_current, open_segments, tidcs = carry
 
         # Compute all T-H, H-T, H-H, T-T distances between the current segment
-        # and all other open segments 
+        # and all other open segments
         dist_th = jnp.abs(seg_current[0, tidx_current] - open_segments[:, 0, 0])
-        dist_ht = vmap(
-            lambda seg, tidx: jnp.abs(seg_current[0, 0] - seg[0, tidx])
-        )(open_segments, tidcs)
+        dist_ht = vmap(lambda seg, tidx: jnp.abs(seg_current[0, 0] - seg[0, tidx]))(
+            open_segments, tidcs
+        )
         dist_hh = jnp.abs(seg_current[0, 0] - open_segments[:, 0, 0])
         dist_tt = vmap(
             lambda seg, tidx: jnp.abs(seg_current[0, tidx_current] - seg[0, tidx])
@@ -506,7 +549,7 @@ def _merge_open_segments(segments, mask_closed):
 
         distances = jnp.stack([dist_th, dist_ht, dist_hh, dist_tt])
 
-        # Get the connection type and the index of the "closest" segment, the 
+        # Get the connection type and the index of the "closest" segment, the
         # second closest segment and so on
         ctype1, idx1 = jnp.unravel_index(
             jnp.argsort(distances.reshape(-1))[0], distances.shape
@@ -528,100 +571,112 @@ def _merge_open_segments(segments, mask_closed):
 
         # First merge attempt
         success1, seg_current_new, tidx_current_new = lax.cond(
-            jnp.all(seg1[0] == 0. + 0j),
+            jnp.all(seg1[0] == 0.0 + 0j),
             lambda *args: (True, seg_current, tidx_current),
             _merge_two_segments,
-            seg_current, seg1, tidx_current, tidx1, ctype1,
+            seg_current,
+            seg1,
+            tidx_current,
+            tidx1,
+            ctype1,
         )
 
         # Zero out the other segment if merge was successfull, otherwise do nothing
         open_segments = open_segments.at[idx1].set(
-            jnp.where(
-                success1,
-                jnp.zeros_like(open_segments[0]),
-                open_segments[idx1]
-            )
+            jnp.where(success1, jnp.zeros_like(open_segments[0]), open_segments[idx1])
         )
 
-        # Second merge attempt 
+        # Second merge attempt
         success2, seg_current_new, tidx_current_new = lax.cond(
-            jnp.logical_or(success1, jnp.all(seg2[0] == 0. + 0j)),
+            jnp.logical_or(success1, jnp.all(seg2[0] == 0.0 + 0j)),
             lambda *args: (True, seg_current_new, tidx_current_new),
             _merge_two_segments,
-            seg_current, seg2, tidx_current, tidx2, ctype2,
+            seg_current,
+            seg2,
+            tidx_current,
+            tidx2,
+            ctype2,
         )
 
         open_segments = open_segments.at[idx2].set(
             jnp.where(
                 ~success1 & success2,
                 jnp.zeros_like(open_segments[0]),
-                open_segments[idx2]
+                open_segments[idx2],
             )
         )
 
-        # Third merge attempt 
+        # Third merge attempt
         success3, seg_current_new, tidx_current_new = lax.cond(
-            jnp.logical_or(success2, jnp.all(seg3[0] == 0. + 0j)),
+            jnp.logical_or(success2, jnp.all(seg3[0] == 0.0 + 0j)),
             lambda *args: (True, seg_current_new, tidx_current_new),
             _merge_two_segments,
-            seg_current, seg3, tidx_current, tidx3, ctype3,
+            seg_current,
+            seg3,
+            tidx_current,
+            tidx3,
+            ctype3,
         )
 
         open_segments = open_segments.at[idx3].set(
             jnp.where(
                 ~success1 & ~success2,
                 jnp.zeros_like(open_segments[0]),
-                open_segments[idx3]
+                open_segments[idx3],
             )
         )
 
-        # Fourth merge attempt 
+        # Fourth merge attempt
         success4, seg_current_new, tidx_current_new = lax.cond(
-            jnp.logical_or(success3, jnp.all(seg4[0] == 0. + 0j)),
+            jnp.logical_or(success3, jnp.all(seg4[0] == 0.0 + 0j)),
             lambda *args: (True, seg_current_new, tidx_current_new),
             _merge_two_segments,
-            seg_current, seg4, tidx_current, tidx4, ctype4,
+            seg_current,
+            seg4,
+            tidx_current,
+            tidx4,
+            ctype4,
         )
 
         open_segments = open_segments.at[idx4].set(
             jnp.where(
                 ~success1 & ~success2 & ~success3,
                 jnp.zeros_like(open_segments[0]),
-                open_segments[idx4]
+                open_segments[idx4],
             )
         )
- 
-                
-        return (seg_current_new, tidx_current_new, open_segments, tidcs), 0.
-    
+
+        return (seg_current_new, tidx_current_new, open_segments, tidcs), 0.0
+
     init = (open_segments[0], tail_idcs[0], open_segments[1:], tail_idcs[1:])
     carry, _ = lax.scan(body_fn, init, idcs)
-    seg_merged, tidx_merged, open_segments, tail_idcs = carry 
-    
-    # Store the merged closed segment 
-    closed_segments = closed_segments.at[-1].set(seg_merged)
-    
-    # The remaining number of open segments 
-    n_remaining -= 2 # previous run used up at least 2 segments
-    idcs = jnp.arange(0, n_remaining)
-        
-    init = (open_segments[0], tail_idcs[0], open_segments[1:], tail_idcs[1:])
-    carry, _ = lax.scan(body_fn, init,  idcs)
     seg_merged, tidx_merged, open_segments, tail_idcs = carry
 
-    # Store the second merged contour 
+    # Store the merged closed segment
+    closed_segments = closed_segments.at[-1].set(seg_merged)
+
+    # The remaining number of open segments
+    n_remaining -= 2  # previous run used up at least 2 segments
+    idcs = jnp.arange(0, n_remaining)
+
+    init = (open_segments[0], tail_idcs[0], open_segments[1:], tail_idcs[1:])
+    carry, _ = lax.scan(body_fn, init, idcs)
+    seg_merged, tidx_merged, open_segments, tail_idcs = carry
+
+    # Store the second merged contour
     closed_segments = closed_segments.at[-2].set(seg_merged)
-    
+
     return closed_segments
+
 
 @partial(jit, static_argnames=("n_contours"))
 def _get_contours(segments, segments_are_closed, n_contours=5):
     """
-    Given disjoint segments as an input, merge them into closed contours - the 
+    Given disjoint segments as an input, merge them into closed contours - the
     boundaries of the final images.
 
     Args:
-        segments (array_like): Array of shape `(n_segments, 2, n_points)` 
+        segments (array_like): Array of shape `(n_segments, 2, n_points)`
             containing the segment points and the parity for each point.
         segments_are_closed (bool): False if not all segments are closed.
         n_contours (int, optional): Final number of contours. Defaults to 5.
@@ -636,8 +691,10 @@ def _get_contours(segments, segments_are_closed, n_contours=5):
     cond2 = jnp.abs(segments[:, 0, 0] - segments[:, 0, -1]) < 1e-05
     mask_closed = jnp.logical_and(cond1, cond2)
 
-    # Pad segments with zeros to make room for merged segments 
-    segments = jnp.pad(segments, ((0,0), (0,0),(0, 3*segments.shape[-1])), constant_values=0.)
+    # Pad segments with zeros to make room for merged segments
+    segments = jnp.pad(
+        segments, ((0, 0), (0, 0), (0, 3 * segments.shape[-1])), constant_values=0.0
+    )
 
     # If the segments are closed do nothing, otherwise run the merging algorithm
     contours = lax.cond(
@@ -645,7 +702,7 @@ def _get_contours(segments, segments_are_closed, n_contours=5):
         lambda *args: segments,
         _merge_open_segments,
         segments,
-        mask_closed
+        mask_closed,
     )
 
     # Sort such that nonempty contours appear first
@@ -658,36 +715,38 @@ def _get_contours(segments, segments_are_closed, n_contours=5):
 
     # Set the last point in each contour to be equal to the first point
     tail_idcs = vmap(last_nonzero)(jnp.abs(contours))
-    contours = vmap(
-        lambda idx, contour: contour.at[idx + 1].set(contour[0])
-    )(tail_idcs, contours)
+    contours = vmap(lambda idx, contour: contour.at[idx + 1].set(contour[0]))(
+        tail_idcs, contours
+    )
     tail_idcs += 1
 
     return contours, parity, tail_idcs
-     
+
+
 @partial(jit, static_argnames=("nlenses"))
 def _brightness_profile(z, rho, w_center, u=0.1, nlenses=2, **kwargs):
-    if nlenses==2:
-        w = lens_eq_binary(z, kwargs['a'], kwargs['e1'])
-    elif nlenses==3:
-        w = lens_eq_triple(z, kwargs['a'], kwargs['r3'], kwargs['e1'], kwargs['e2'])
+    if nlenses == 2:
+        w = lens_eq_binary(z, kwargs["a"], kwargs["e1"])
+    elif nlenses == 3:
+        w = lens_eq_triple(z, kwargs["a"], kwargs["r3"], kwargs["e1"], kwargs["e2"])
     else:
         raise ValueError("`nlenses` has to be set to either 2 or 3")
-        
-    r = jnp.abs(w - w_center)/rho
-    # See Dominik 1998 for details 
+
+    r = jnp.abs(w - w_center) / rho
+    # See Dominik 1998 for details
     def safe_for_grad_sqrt(x):
-        return jnp.sqrt(jnp.where(x > 0., x, 0.))
-    
-    # See Dominik 1998 for details 
+        return jnp.sqrt(jnp.where(x > 0.0, x, 0.0))
+
+    # See Dominik 1998 for details
     B_r = jnp.where(
-        r <= 1.,
+        r <= 1.0,
         1 + safe_for_grad_sqrt(1 - r**2),
-        1 - safe_for_grad_sqrt(1 - 1./r**2),
+        1 - safe_for_grad_sqrt(1 - 1.0 / r**2),
     )
 
-    I = 3./(3. - u)*(u*B_r + 1. - 2.*u)
+    I = 3.0 / (3.0 - u) * (u * B_r + 1.0 - 2.0 * u)
     return I
+
 
 @partial(jit, static_argnames=("nlenses"))
 def _fn_indicator(x, y, w_cent, rho, nlenses=2, **kwargs):
@@ -696,9 +755,11 @@ def _fn_indicator(x, y, w_cent, rho, nlenses=2, **kwargs):
     otherwise it is -0.5.
     """
     if nlenses == 2:
-        w = lens_eq_binary(x + 1j*y, kwargs['a'], kwargs['e1'])
+        w = lens_eq_binary(x + 1j * y, kwargs["a"], kwargs["e1"])
     elif nlenses == 3:
-        w = lens_eq_triple(x + 1j*y, kwargs['a'], kwargs['r3'], kwargs['e1'], kwargs['e2'])
+        w = lens_eq_triple(
+            x + 1j * y, kwargs["a"], kwargs["r3"], kwargs["e1"], kwargs["e2"]
+        )
     else:
         raise ValueError("`nlenses` has to be set to either 2 or 3")
     xs = jnp.real(w) - jnp.real(w_cent)
@@ -707,44 +768,15 @@ def _fn_indicator(x, y, w_cent, rho, nlenses=2, **kwargs):
     return cond.astype(float) - 0.5
 
 
-@partial(jit, static_argnames=("nlenses"))
-def _refine_xmid_bisect(x_mid, y_mid, delta_x, w_center, rho, nlenses=2, **kwargs):
-    delta = mean_zero_avoiding(jnp.abs(delta_x))
-    upper = x_mid + 0.5*delta
-    lower = x_mid - 0.5*delta
-
-    def bisect_x(y, lower, upper, tol=1e-08):
-        val, state = Bisection(
-            lambda x: _fn_indicator(x, y, w_center, rho, nlenses=nlenses, **kwargs),
-            lower=lower, upper=upper, maxiter=50, tol=tol, check_bracket=False
-        ).run()
-        return val
-    
-    return vmap(vmap(bisect_x))(y_mid, lower, upper)
-
-
-@partial(jit, static_argnames=("nlenses"))
-def _refine_ymid_bisect(x_mid, y_mid, delta_y, w_center, rho, nlenses=2, **kwargs):
-    delta = mean_zero_avoiding(jnp.abs(delta_y))
-    upper = y_mid + 0.5*delta
-    lower = y_mid - 0.5*delta
-
-    def bisect_y(x, lower, upper, tol=1e-08):
-        val, state = Bisection(
-            lambda y: _fn_indicator(x, y, w_center, rho, nlenses=nlenses, **kwargs),
-            lower=lower, upper=upper, maxiter=50, tol=tol, check_bracket=False
-        ).run()
-        return val
-
-    return vmap(vmap(bisect_y))(x_mid, lower, upper)
-
-@partial(jit, static_argnames=('nlenses', 'n_intervals'))
-def _refine_contours_iteration(contours, tail_idcs, w_center, rho, n_intervals=50, nlenses=2,  **kwargs):
+@partial(jit, static_argnames=("nlenses", "n_intervals"))
+def _refine_contours_iteration(
+    contours, tail_idcs, w_center, rho, n_intervals=50, nlenses=2, **kwargs
+):
     # Compute spacing between consecutive points
-    diff = jnp.pad(jnp.diff(contours, axis=1), ((0,0), (0, 1)))
+    diff = jnp.pad(jnp.diff(contours, axis=1), ((0, 0), (0, 1)))
     delta_x, delta_y = jnp.real(diff), jnp.imag(diff)
     delta = jnp.abs(diff)
-    delta = vmap(lambda x, i: x.at[i].set(0.))(delta, tail_idcs)
+    delta = vmap(lambda x, i: x.at[i].set(0.0))(delta, tail_idcs)
 
     # Get idcs of points with largest spacing
     idcs_maxdelta = jnp.argsort(delta, axis=1)[:, ::-1][:, :n_intervals]
@@ -759,88 +791,128 @@ def _refine_contours_iteration(contours, tail_idcs, w_center, rho, n_intervals=5
     x2 = jnp.take_along_axis(x, idcs_maxdelta + 1, axis=1)
     y2 = jnp.take_along_axis(y, idcs_maxdelta + 1, axis=1)
 
-    x_mid = 0.5*(x1 + x2)
-    y_mid = 0.5*(y1 + y2)
+    x_mid = 0.5 * (x1 + x2)
+    y_mid = 0.5 * (y1 + y2)
 
-    # Solve optimization problem to refine estimate of y 
+    # Solve optimization problem to refine estimate of y
     def bisect_y(x, lower, upper, tol=1e-08):
         val, state = Bisection(
             lambda y: _fn_indicator(x, y, w_center, rho, nlenses=nlenses, **kwargs),
-            lower=lower, upper=upper, maxiter=50, tol=tol, check_bracket=False
+            lower=lower,
+            upper=upper,
+            maxiter=50,
+            tol=tol,
+            check_bracket=False,
         ).run()
         return val
 
     # We keep x_mid fixed and optimize y in range (y_mid - delta_y_mid, y_mid + delta_y_mid)
-    # to find the exact location of the limb 
-    lower = y_mid - 0.1*jnp.take_along_axis(delta_y, idcs_maxdelta, axis=1)
-    upper = y_mid + 0.1*jnp.take_along_axis(delta_y, idcs_maxdelta, axis=1)
+    # to find the exact location of the limb
+    lower = y_mid - 0.1 * jnp.take_along_axis(delta_y, idcs_maxdelta, axis=1)
+    upper = y_mid + 0.1 * jnp.take_along_axis(delta_y, idcs_maxdelta, axis=1)
 
     y_limb = vmap(vmap(bisect_y))(x_mid, lower, upper)
 
-    x_ext = vmap(lambda x, xin, idcs: jnp.insert(x, idcs, xin))(x, x_mid, idcs_maxdelta + 1)
-    y_ext = vmap(lambda x, xin, idcs: jnp.insert(x, idcs, xin))(y, y_limb, idcs_maxdelta + 1)
+    x_ext = vmap(lambda x, xin, idcs: jnp.insert(x, idcs, xin))(
+        x, x_mid, idcs_maxdelta + 1
+    )
+    y_ext = vmap(lambda x, xin, idcs: jnp.insert(x, idcs, xin))(
+        y, y_limb, idcs_maxdelta + 1
+    )
 
     tail_idcs += n_intervals
 
-    return x_ext + 1j*y_ext, tail_idcs
+    return x_ext + 1j * y_ext, tail_idcs
 
-@partial(jit, static_argnames=('nlenses', 'n_intervals', 'n_iterations'))
-def _refine_contours(contours, tail_idcs, w_center, rho,  n_intervals=10, n_iterations=3, nlenses=2, **kwargs):
+
+@partial(jit, static_argnames=("nlenses", "n_intervals", "n_iterations"))
+def _refine_contours(
+    contours,
+    tail_idcs,
+    w_center,
+    rho,
+    n_intervals=10,
+    n_iterations=3,
+    nlenses=2,
+    **kwargs
+):
     for i in range(n_iterations):
         contours, tail_idcs = _refine_contours_iteration(
-            contours, tail_idcs, w_center, rho,  n_intervals=n_intervals, nlenses=nlenses, **kwargs
+            contours,
+            tail_idcs,
+            w_center,
+            rho,
+            n_intervals=n_intervals,
+            nlenses=nlenses,
+            **kwargs
         )
     return contours, tail_idcs
 
-    
-@partial(jit, static_argnames=("nlenses", "npts", "inner_integration_rule", "outer_integration_rule"))
+
+@partial(
+    jit, static_argnames=("nlenses", "npts", "integration_rule", "integration_rule")
+)
 def _integrate_ld(
-    w_center, rho, contours, parity, tail_idcs, u=0., nlenses=2, npts=301, 
-    outer_integration_rule="midpoint", inner_integration_rule="trapezoidal", **kwargs
-):  
+    w_center,
+    rho,
+    contours,
+    parity,
+    tail_idcs,
+    u=0.0,
+    nlenses=2,
+    npts=301,
+    integration_rule="trapezoidal",
+    **kwargs
+):
     # Make sure that npts is odd
-#    npts = jnp.where(npts % 2 == 0, npts + 1, npts)
+    #    npts = jnp.where(npts % 2 == 0, npts + 1, npts)
 
     def P(x0, y0, xl, yl):
-        """Integrate from x0 to xl for each yl."""    
+        """Integrate from x0 to xl for each yl."""
         # Construct grid in z2 and evaluate the brightness profile at each point
-        y = jnp.linspace(y0*jnp.ones_like(xl), yl, npts)
-        integrands = _brightness_profile(xl + 1j*y, rho, w_center, u=u, nlenses=nlenses, **kwargs)
-        if inner_integration_rule == "simpson":
+        y = jnp.linspace(y0 * jnp.ones_like(xl), yl, npts)
+        integrands = _brightness_profile(
+            xl + 1j * y, rho, w_center, u=u, nlenses=nlenses, **kwargs
+        )
+        if integration_rule == "simpson":
             I = simpson_quadrature(y, integrands)
-        elif inner_integration_rule == "trapezoidal":
+        elif integration_rule == "trapezoidal":
             I = jnp.trapz(integrands, x=y, axis=0)
         else:
             raise ValueError(
-                "`inner_integration_rule` has to be either `simpson` or `trapezoidal`"
+                "`integration_rule` has to be either `simpson` or `trapezoidal`"
             )
-        return -0.5*I
+        return -0.5 * I
 
     def Q(x0, y0, xl, yl):
         """Integrate from y0 to yl for each xl."""
         # Construct grid in z1 and evaluate the brightness profile at each point
-        x = jnp.linspace(x0*jnp.ones_like(xl), xl, npts)
-        integrands = _brightness_profile(x + 1j*yl, rho, w_center, u=u, nlenses=nlenses, **kwargs)
+        x = jnp.linspace(x0 * jnp.ones_like(xl), xl, npts)
+        integrands = _brightness_profile(
+            x + 1j * yl, rho, w_center, u=u, nlenses=nlenses, **kwargs
+        )
 
-        if inner_integration_rule == "simpson":
+        if integration_rule == "simpson":
             I = simpson_quadrature(x, integrands)
-        elif inner_integration_rule == "trapezoidal":
+        elif integration_rule == "trapezoidal":
             I = jnp.trapz(integrands, x=x, axis=0)
         else:
             raise ValueError(
-                "`inner_integration_rule` has to be either `simpson` or `trapezoidal`"
+                "`integration_rule` has to be either `simpson` or `trapezoidal`"
             )
-        return 0.5*I
+        return 0.5 * I
 
     # We choose the centroid of each contour to be lower limit for the P and Q
     # integrals
-    z0 = vmap(lambda idx, contour: contour.sum()/(idx + 1))(tail_idcs, contours)
+    z0 = vmap(lambda idx, contour: contour.sum() / (idx + 1))(tail_idcs, contours)
     x0, y0 = jnp.real(z0), jnp.imag(z0)
 
     # Select k and (k + 1)th elements
     contours_k = contours
-    contours_kp1 = jnp.pad(contours[:, 1:], ((0,0),(0,1)))
-    contours_k = vmap(lambda idx, contour: contour.at[idx].set(0.))(tail_idcs, contours_k)
+    contours_kp1 = jnp.pad(contours[:, 1:], ((0, 0), (0, 1)))
+    contours_k = vmap(lambda idx, contour: contour.at[idx].set(0.0))(
+        tail_idcs, contours_k
+    )
 
     # Compute the integral using the midpoint rule
     x_k = jnp.real(contours_k)
@@ -852,56 +924,35 @@ def _integrate_ld(
     delta_x = x_kp1 - x_k
     delta_y = y_kp1 - y_k
 
-    x_mid = 0.5*(x_k + x_kp1)
-    y_mid = 0.5*(y_k + y_kp1)
+    x_mid = 0.5 * (x_k + x_kp1)
+    y_mid = 0.5 * (y_k + y_kp1)
 
-    if outer_integration_rule == "midpoint":
-        Pmid = vmap(P)(x0, y0, x_mid, y_mid)
-        Qmid = vmap(Q)(x0, y0, x_mid, y_mid)
+    Pmid = vmap(P)(x0, y0, x_mid, y_mid)
+    Qmid = vmap(Q)(x0, y0, x_mid, y_mid)
 
-        I1 = Pmid*delta_x 
-        I2 = Qmid*delta_y 
+    I1 = Pmid * delta_x
+    I2 = Qmid * delta_y
 
-    elif outer_integration_rule == "simpson":
-        x_mid_refined = _refine_xmid_bisect(
-            x_mid, y_mid, delta_x, w_center, rho, nlenses=nlenses, **kwargs
-        )
-        y_mid_refined = _refine_ymid_bisect(
-            x_mid, y_mid, delta_y, w_center, rho, nlenses=nlenses, **kwargs
-        )
+    mag = jnp.sum(I1 + I2, axis=1) / (np.pi * rho**2)
 
-        Pmid = vmap(P)(x0, y0, x_mid, y_mid_refined)
-        Qmid = vmap(Q)(x0, y0, x_mid_refined, y_mid)
-        
-        Pk = vmap(P)(x0, y0, x_k, y_k)
-        Qk = vmap(Q)(x0, y0, x_k, y_k)
-        
-        Pkp1 = vmap(P)(x0, y0, x_k, y_k)
-        Qkp1 = vmap(Q)(x0, y0, x_k, y_k)
-        
-        I1 = delta_x/6*(Pk + 4*Pmid + Pkp1)
-        I2 = delta_y/6*(Qk + 4*Qmid + Qkp1)
-
-    else:
-        raise ValueError(
-            "`integration_rule` has to be set to either 'midpoint' or 'simpson'"
-        )
-   
-    mag = jnp.sum(I1 + I2, axis=1)/(np.pi*rho**2)
-
-    # sum magnifications for each image, taking into account the parity of each 
+    # sum magnifications for each image, taking into account the parity of each
     # image
-    return jnp.abs(mag*parity).sum()    
+    return jnp.abs(mag * parity).sum()
 
-@partial(jit, static_argnames=("nlenses", "integration_rule"))
+
+@jit
 def _integrate_unif(
-    w_center, rho, contours, parity, tail_idcs, nlenses=2, 
-    integration_rule="midpoint", **kwargs
-):  
+    rho,
+    contours,
+    parity,
+    tail_idcs,
+):
     # Select k and (k + 1)th elements
     contours_k = contours
-    contours_kp1 = jnp.pad(contours[:, 1:], ((0,0),(0,1)))
-    contours_k = vmap(lambda idx, contour: contour.at[idx].set(0.))(tail_idcs, contours_k)
+    contours_kp1 = jnp.pad(contours[:, 1:], ((0, 0), (0, 1)))
+    contours_k = vmap(lambda idx, contour: contour.at[idx].set(0.0))(
+        tail_idcs, contours_k
+    )
 
     # Compute the integral using the midpoint rule
     x_k = jnp.real(contours_k)
@@ -913,47 +964,36 @@ def _integrate_unif(
     delta_x = x_kp1 - x_k
     delta_y = y_kp1 - y_k
 
-    x_mid = 0.5*(x_k + x_kp1)
-    y_mid = 0.5*(y_k + y_kp1)
+    x_mid = 0.5 * (x_k + x_kp1)
+    y_mid = 0.5 * (y_k + y_kp1)
 
-    if integration_rule == "midpoint":
-        I1 = 0.5*x_mid*delta_y
-        I2 = -0.5*y_mid*delta_x
+    I1 = 0.5 * x_mid * delta_y
+    I2 = -0.5 * y_mid * delta_x
 
-    elif integration_rule == "simpson":
-        x_mid_refined = _refine_xmid_bisect(
-            x_mid, y_mid, delta_x, w_center, rho, nlenses=nlenses, **kwargs
-        )
-        y_mid_refined = _refine_ymid_bisect(
-            x_mid, y_mid, delta_y, w_center, rho, nlenses=nlenses, **kwargs
-        )
+    mag = jnp.sum(I1 + I2, axis=1) / (np.pi * rho**2)
 
-        I1 = -delta_x/6.*(y_k + 4*y_mid_refined + y_kp1)
-        I2 = delta_y/6*(x_k + 4*x_mid_refined+ x_kp1)
-
-    else:
-        raise ValueError(
-            "`integration_rule` has to be set to either 'midpoint' or 'simpson'"
-        )
-   
-    mag = jnp.sum(I1 + I2, axis=1)/(np.pi*rho**2)
-
-    # sum magnifications for each image, taking into account the parity of each 
+    # sum magnifications for each image, taking into account the parity of each
     # image
-    return jnp.abs(mag*parity).sum()    
+    return jnp.abs(mag * parity).sum()
 
 
 @partial(
-    jit, 
+    jit,
     static_argnames=(
-        "npts_limb", "npts_ld", "npts_init_fraction", "inner_integration_rule",
-        "outer_integration_rule"
-        ))
+        "npts_limb",
+        "npts_ld",
+        "integration_rule",
+    ),
+)
 def mag_extended_source_binary(
-    w, a, e1, rho, u=0., 
-    npts_limb=1000, npts_ld=301, 
-    npts_init_fraction=0.2, inner_integration_rule="trapezoidal", 
-    outer_integration_rule="midpoint"
+    w,
+    a,
+    e1,
+    rho,
+    u=0.0,
+    npts_limb=1000,
+    npts_ld=301,
+    integration_rule="trapezoidal",
 ):
     """
     Compute the magnification for an extended source lensed by a binary lens
@@ -966,56 +1006,84 @@ def mag_extended_source_binary(
             r1 = a and r2 = -a.
         e1 (array_like): Mass fraction of the first lens e1 = m1/(m1+m2). It
             follows that e2 = 1 - e1.
-        rho (float): Source radius in Einstein radii. 
+        rho (float): Source radius in Einstein radii.
         u (float, optional): Linear limb darkening coefficient. Defaults to 0..
         npts_limb (int, optional): Total number of points on the source limb for
             which we evaluate the images. This will determine the accuracy of
-            the magnification calculation. 
-        npts_ld (int, optional): Number of points at which the stellar 
+            the magnification calculation.
+        npts_ld (int, optional): Number of points at which the stellar
             brightness function is evaluated when computing the integrals P and
             Q defined in Dominik 1998. Defaults to 100.
+        integration_rule (str, optional): Integration rule to use when computing
+            the P and Q integrals. Can be either "simpson" or "trapezoidal".
+            Defaults to "trapezoidal".
 
     Returns:
         float: Total magnification factor.
     """
     images, images_mask, images_parity = _images_of_source_limb(
-         w, rho, nlenses=2, a=a, e1=e1, npts=npts_limb, npts_init=250
+        w, rho, nlenses=2, a=a, e1=e1, npts=npts_limb, npts_init=250
     )
     segments, cond_closed = _get_segments(images, images_mask, images_parity, nlenses=2)
     contours, parity, tail_idcs = _get_contours(segments, cond_closed, n_contours=5)
     contours, tail_idcs = _refine_contours(
-        contours, tail_idcs, w, rho, n_intervals=100, n_iterations=3, nlenses=2, a=a, e1=e1
+        contours,
+        tail_idcs,
+        w,
+        rho,
+        n_intervals=100,
+        n_iterations=3,
+        nlenses=2,
+        a=a,
+        e1=e1,
     )
 
     mag = lax.cond(
-        u == 0.,
+        u == 0.0,
         lambda: _integrate_unif(
-            w, rho, contours, parity, tail_idcs, nlenses=2, 
-            integration_rule=outer_integration_rule, 
-            a=a, e1=e1,
+            rho,
+            contours,
+            parity,
+            tail_idcs,
         ),
         lambda: _integrate_ld(
-            w, rho, contours, parity, tail_idcs, u=u, nlenses=2, npts=npts_ld, 
-            inner_integration_rule=inner_integration_rule, 
-            outer_integration_rule=outer_integration_rule,
-            a=a, e1=e1,
-        )
+            w,
+            rho,
+            contours,
+            parity,
+            tail_idcs,
+            u=u,
+            nlenses=2,
+            npts=npts_ld,
+            integration_rule=integration_rule,
+            integration_rule=integration_rule,
+            a=a,
+            e1=e1,
+        ),
     )
-    
+
     return mag
 
 
 @partial(
-    jit, 
+    jit,
     static_argnames=(
-        "npts_limb", "npts_ld", "npts_init_fraction", "inner_integration_rule",
-        "outer_integration_rule"
-        ))
+        "npts_limb",
+        "npts_ld",
+        "integration_rule",
+    ),
+)
 def mag_extended_source_triple(
-    w, a, r3, e1, e2, rho, u=0., npts_limb=1000, npts_ld=301, 
-     inner_integration_rule="trapezoidal", 
-    outer_integration_rule="midpoint"
-
+    w,
+    a,
+    r3,
+    e1,
+    e2,
+    rho,
+    u=0.0,
+    npts_limb=1000,
+    npts_ld=301,
+    integration_rule="trapezoidal",
 ):
     """
     Compute the magnification for an extended source lensed by a triple lens
@@ -1028,42 +1096,62 @@ def mag_extended_source_triple(
         r3 (float): The position of the third lens.
         e1 (array_like): Mass fraction of the first lens e1 = m1/(m1 + m2 + m3).
         e2 (array_like): Mass fraction of the second lens e2 = m2/(m1 + m2 + m3).
-        rho (float): Source radius in Einstein radii. 
+        rho (float): Source radius in Einstein radii.
         u (float, optional): Linear limb darkening coefficient. Defaults to 0..
         npts_limb (int, optional): Total number of points on the source limb for
             which we evaluate the images This is a key input to the method which
-            determines the accuracy of the magnification calculation. Defaults 
+            determines the accuracy of the magnification calculation. Defaults
             to 2000.
-        npts_ld (int, optional): Number of points at which the stellar 
+        npts_ld (int, optional): Number of points at which the stellar
             brightness function is evaluated when computing the integrals P and
             Q defined in Dominik 1998. Defaults to 100.
+        integration_rule (str, optional): Integration rule to use when computing
+            the P and Q integrals. Can be either "simpson" or "trapezoidal".
+            Defaults to "trapezoidal".
 
     Returns:
         float: Total magnification factor.
     """
     images, images_mask, images_parity = _images_of_source_limb(
-         w, rho, nlenses=3, a=a, r3=r3, e1=e1, e2=e2, npts=npts_limb, npts_init=250
+        w, rho, nlenses=3, a=a, r3=r3, e1=e1, e2=e2, npts=npts_limb, npts_init=250
     )
     segments, cond_closed = _get_segments(images, images_mask, images_parity, nlenses=3)
     contours, parity, tail_idcs = _get_contours(segments, cond_closed, n_contours=5)
     contours, tail_idcs = _refine_contours(
-        contours, tail_idcs, w, rho, 
-        n_intervals=100, n_iterations=3, nlenses=3, a=a, r3=r3, e1=e1, e2=e2
+        contours,
+        tail_idcs,
+        w,
+        rho,
+        n_intervals=100,
+        n_iterations=3,
+        nlenses=3,
+        a=a,
+        r3=r3,
+        e1=e1,
+        e2=e2,
     )
 
     mag = lax.cond(
-        u == 0.,
+        u == 0.0,
         lambda: _integrate_unif(
-            w, rho, contours, parity, tail_idcs, nlenses=3, 
-            integration_rule=outer_integration_rule, 
-            a=a, e1=e1,
+            rho,
+            contours,
+            parity,
+            tail_idcs,
         ),
         lambda: _integrate_ld(
-            w, rho, contours, parity, tail_idcs, u=u, nlenses=3, npts=npts_ld, 
-            inner_integration_rule=inner_integration_rule, 
-            outer_integration_rule=outer_integration_rule,
-            a=a, e1=e1,
-        )
+            w,
+            rho,
+            contours,
+            parity,
+            tail_idcs,
+            u=u,
+            nlenses=3,
+            npts=npts_ld,
+            integration_rule=integration_rule,
+            a=a,
+            e1=e1,
+        ),
     )
 
     return mag
