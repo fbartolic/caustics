@@ -58,7 +58,11 @@ def max_zero_avoiding(x):
 @jit
 def mean_zero_avoiding(x):
     mask = x == 0.
-    return jnp.nanmean(jnp.where(mask, jnp.nan, x))
+    return jnp.where(
+        jnp.all(mask),
+        0.,
+        jnp.nanmean(jnp.where(mask, jnp.nan, x))
+    )
 
 @jit
 def sparse_argsort(a):

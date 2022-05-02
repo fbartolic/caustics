@@ -663,7 +663,7 @@ def _get_contours(segments, segments_are_closed, n_contours=5):
     )(tail_idcs, contours)
     tail_idcs += 1
 
-    return contours, parity
+    return contours, parity, tail_idcs
      
 @partial(jit, static_argnames=("nlenses"))
 def _brightness_profile(z, rho, w_center, u=0.1, nlenses=2, **kwargs):
@@ -738,11 +738,64 @@ def _refine_ymid_bisect(x_mid, y_mid, delta_y, w_center, rho, nlenses=2, **kwarg
 
     return vmap(vmap(bisect_y))(x_mid, lower, upper)
 
+@partial(jit, static_argnames=('nlenses', 'n_intervals'))
+def _refine_contours_iteration(contours, tail_idcs, w_center, rho, n_intervals=50, nlenses=2,  **kwargs):
+    # Compute spacing between consecutive points
+    diff = jnp.pad(jnp.diff(contours, axis=1), ((0,0), (0, 1)))
+    delta_x, delta_y = jnp.real(diff), jnp.imag(diff)
+    delta = jnp.abs(diff)
+    delta = vmap(lambda x, i: x.at[i].set(0.))(delta, tail_idcs)
+
+    # Get idcs of points with largest spacing
+    idcs_maxdelta = jnp.argsort(delta, axis=1)[:, ::-1][:, :n_intervals]
+    idcs_maxdelta = jnp.sort(idcs_maxdelta, axis=1)
+
+    # Generate points at the midpoints of the intervals
+    x = jnp.real(contours)
+    y = jnp.imag(contours)
+
+    x1 = jnp.take_along_axis(x, idcs_maxdelta, axis=1)
+    y1 = jnp.take_along_axis(y, idcs_maxdelta, axis=1)
+    x2 = jnp.take_along_axis(x, idcs_maxdelta + 1, axis=1)
+    y2 = jnp.take_along_axis(y, idcs_maxdelta + 1, axis=1)
+
+    x_mid = 0.5*(x1 + x2)
+    y_mid = 0.5*(y1 + y2)
+
+    # Solve optimization problem to refine estimate of y 
+    def bisect_y(x, lower, upper, tol=1e-08):
+        val, state = Bisection(
+            lambda y: _fn_indicator(x, y, w_center, rho, nlenses=nlenses, **kwargs),
+            lower=lower, upper=upper, maxiter=50, tol=tol, check_bracket=False
+        ).run()
+        return val
+
+    # We keep x_mid fixed and optimize y in range (y_mid - delta_y_mid, y_mid + delta_y_mid)
+    # to find the exact location of the limb 
+    lower = y_mid - 0.1*jnp.take_along_axis(delta_y, idcs_maxdelta, axis=1)
+    upper = y_mid + 0.1*jnp.take_along_axis(delta_y, idcs_maxdelta, axis=1)
+
+    y_limb = vmap(vmap(bisect_y))(x_mid, lower, upper)
+
+    x_ext = vmap(lambda x, xin, idcs: jnp.insert(x, idcs, xin))(x, x_mid, idcs_maxdelta + 1)
+    y_ext = vmap(lambda x, xin, idcs: jnp.insert(x, idcs, xin))(y, y_limb, idcs_maxdelta + 1)
+
+    tail_idcs += n_intervals
+
+    return x_ext + 1j*y_ext, tail_idcs
+
+@partial(jit, static_argnames=('nlenses', 'n_intervals', 'n_iterations'))
+def _refine_contours(contours, tail_idcs, w_center, rho,  n_intervals=10, n_iterations=3, nlenses=2, **kwargs):
+    for i in range(n_iterations):
+        contours, tail_idcs = _refine_contours_iteration(
+            contours, tail_idcs, w_center, rho,  n_intervals=n_intervals, nlenses=nlenses, **kwargs
+        )
+    return contours, tail_idcs
 
     
 @partial(jit, static_argnames=("nlenses", "npts", "inner_integration_rule", "outer_integration_rule"))
-def _integrate(
-    w_center, rho, contours, parity, u=0., nlenses=2, npts=301, 
+def _integrate_ld(
+    w_center, rho, contours, parity, tail_idcs, u=0., nlenses=2, npts=301, 
     outer_integration_rule="midpoint", inner_integration_rule="trapezoidal", **kwargs
 ):  
     # Make sure that npts is odd
@@ -778,9 +831,6 @@ def _integrate(
                 "`inner_integration_rule` has to be either `simpson` or `trapezoidal`"
             )
         return 0.5*I
-
-    # Compute the tail indices for each contour 
-    tail_idcs = vmap(last_nonzero)(jnp.abs(contours))
 
     # We choose the centroid of each contour to be lower limit for the P and Q
     # integrals
@@ -843,6 +893,55 @@ def _integrate(
     # image
     return jnp.abs(mag*parity).sum()    
 
+@partial(jit, static_argnames=("nlenses", "integration_rule"))
+def _integrate_unif(
+    w_center, rho, contours, parity, tail_idcs, nlenses=2, 
+    integration_rule="midpoint", **kwargs
+):  
+    # Select k and (k + 1)th elements
+    contours_k = contours
+    contours_kp1 = jnp.pad(contours[:, 1:], ((0,0),(0,1)))
+    contours_k = vmap(lambda idx, contour: contour.at[idx].set(0.))(tail_idcs, contours_k)
+
+    # Compute the integral using the midpoint rule
+    x_k = jnp.real(contours_k)
+    y_k = jnp.imag(contours_k)
+
+    x_kp1 = jnp.real(contours_kp1)
+    y_kp1 = jnp.imag(contours_kp1)
+
+    delta_x = x_kp1 - x_k
+    delta_y = y_kp1 - y_k
+
+    x_mid = 0.5*(x_k + x_kp1)
+    y_mid = 0.5*(y_k + y_kp1)
+
+    if integration_rule == "midpoint":
+        I1 = 0.5*x_mid*delta_y
+        I2 = -0.5*y_mid*delta_x
+
+    elif integration_rule == "simpson":
+        x_mid_refined = _refine_xmid_bisect(
+            x_mid, y_mid, delta_x, w_center, rho, nlenses=nlenses, **kwargs
+        )
+        y_mid_refined = _refine_ymid_bisect(
+            x_mid, y_mid, delta_y, w_center, rho, nlenses=nlenses, **kwargs
+        )
+
+        I1 = -delta_x/6.*(y_k + 4*y_mid_refined + y_kp1)
+        I2 = delta_y/6*(x_k + 4*x_mid_refined+ x_kp1)
+
+    else:
+        raise ValueError(
+            "`integration_rule` has to be set to either 'midpoint' or 'simpson'"
+        )
+   
+    mag = jnp.sum(I1 + I2, axis=1)/(np.pi*rho**2)
+
+    # sum magnifications for each image, taking into account the parity of each 
+    # image
+    return jnp.abs(mag*parity).sum()    
+
 
 @partial(
     jit, 
@@ -883,13 +982,26 @@ def mag_extended_source_binary(
          w, rho, nlenses=2, a=a, e1=e1, npts=npts_limb, npts_init=250
     )
     segments, cond_closed = _get_segments(images, images_mask, images_parity, nlenses=2)
-    contours, parity = _get_contours(segments, cond_closed, n_contours=5)
-    mag = _integrate(w, rho, contours, parity, u=u, nlenses=2, npts=npts_ld, 
-                     inner_integration_rule=inner_integration_rule, 
-                     outer_integration_rule=outer_integration_rule,
-                     a=a, e1=e1,
-                     )
+    contours, parity, tail_idcs = _get_contours(segments, cond_closed, n_contours=5)
+    contours, tail_idcs = _refine_contours(
+        contours, tail_idcs, w, rho, n_intervals=100, n_iterations=3, nlenses=2, a=a, e1=e1
+    )
 
+    mag = lax.cond(
+        u == 0.,
+        lambda: _integrate_unif(
+            w, rho, contours, parity, tail_idcs, nlenses=2, 
+            integration_rule=outer_integration_rule, 
+            a=a, e1=e1,
+        ),
+        lambda: _integrate_ld(
+            w, rho, contours, parity, tail_idcs, u=u, nlenses=2, npts=npts_ld, 
+            inner_integration_rule=inner_integration_rule, 
+            outer_integration_rule=outer_integration_rule,
+            a=a, e1=e1,
+        )
+    )
+    
     return mag
 
 
@@ -932,14 +1044,26 @@ def mag_extended_source_triple(
     images, images_mask, images_parity = _images_of_source_limb(
          w, rho, nlenses=3, a=a, r3=r3, e1=e1, e2=e2, npts=npts_limb, npts_init=250
     )
-    segments = _get_segments(images, images_mask, images_parity, nlenses=3)
-    contours = _get_contours(segments, n_contours=10)
+    segments, cond_closed = _get_segments(images, images_mask, images_parity, nlenses=3)
+    contours, parity, tail_idcs = _get_contours(segments, cond_closed, n_contours=5)
+    contours, tail_idcs = _refine_contours(
+        contours, tail_idcs, w, rho, 
+        n_intervals=100, n_iterations=3, nlenses=3, a=a, r3=r3, e1=e1, e2=e2
+    )
 
-    mag = _integrate(w, rho, contours, u=u, nlenses=3, npts=npts_ld, 
-                     inner_integration_rule=inner_integration_rule, 
-                     outer_integration_rule=outer_integration_rule,
-                     a=a, r3=r3, e1=e1, e2=e2
-                     )
-
+    mag = lax.cond(
+        u == 0.,
+        lambda: _integrate_unif(
+            w, rho, contours, parity, tail_idcs, nlenses=3, 
+            integration_rule=outer_integration_rule, 
+            a=a, e1=e1,
+        ),
+        lambda: _integrate_ld(
+            w, rho, contours, parity, tail_idcs, u=u, nlenses=3, npts=npts_ld, 
+            inner_integration_rule=inner_integration_rule, 
+            outer_integration_rule=outer_integration_rule,
+            a=a, e1=e1,
+        )
+    )
 
     return mag
