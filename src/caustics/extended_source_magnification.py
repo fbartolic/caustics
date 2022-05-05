@@ -191,14 +191,9 @@ def _permute_images(images, mask_solutions, parity):
     _, segments = lax.scan(
         apply_linear_sum_assignment, init, jnp.moveaxis(segments, -1, 0)
     )
-
-    # Apply mask
     z, mask_sols, parity = jnp.moveaxis(segments, 1, 0)
-    z = (z * mask_sols).T
-    parity = (parity * mask_sols).T
 
-    segments = jnp.stack([z, parity])
-    return jnp.moveaxis(segments, 0, 1)
+    return z, mask_sols, parity
 
 
 @partial(jit, static_argnames=("n_parts"))
@@ -281,7 +276,13 @@ def _get_segments(images, images_mask, images_parity, nlenses=2):
     nr_of_segments = 2 * n_images
 
     # Untangle the images
-    segments = _permute_images(images, images_mask, images_parity)
+    images, images_mask, parity = _permute_images(images, images_mask, images_parity)
+
+    # Apply mask and bundle the images and parity into a single array
+    images = (images * images_mask).T
+    parity = (parity * images_mask).T
+    segments = jnp.stack([images, parity])
+    segments = jnp.moveaxis(segments, 0, 1)
 
     # Expand size of the array to make room for splitted segments in case there
     # are critical curve crossings
@@ -336,7 +337,7 @@ def _connection_condition(line1, line2, max_dist=1e-01):
             plane where the second point is the end-point.
         max_dist (float, optional): Maximum distance between the ends of the
             two segments. If the distance is greater than this value function
-            return `False`. Defaults to 5e-02.
+            return `False`. Defaults to 1e-01.
 
     Returns:
         bool: True if the two segments should be connected.
@@ -348,12 +349,6 @@ def _connection_condition(line1, line2, max_dist=1e-01):
 
     dist = jnp.abs(line1[1] - line2[1])
     cond1 = dist < max_dist
-
-    # Intersection of two lines
-    D = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
-    px = ((x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4)) / D
-    py = ((x1 * y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3 * y4 - y3 * x4)) / D
-    p = px + 1j * py
 
     # Angle between two vectors
     vec1 = (line1[1] - line1[0]) / jnp.abs(line1[1] - line1[0])
@@ -376,8 +371,8 @@ def _connection_condition(line1, line2, max_dist=1e-01):
     return cond1 & cond2 & cond3 & cond4
 
 
-@jit
-def _merge_two_segments(seg1, seg2, tidx1, tidx2, ctype):
+@partial(jit, static_argnames=("max_dist"))
+def _merge_two_segments(seg1, seg2, tidx1, tidx2, ctype, max_dist=1e-01):
     """
     Given two segments seg1 and seg2, merge them if the condition for merging
     is satisfied, while keeping track of the parity of each segment.
@@ -387,8 +382,9 @@ def _merge_two_segments(seg1, seg2, tidx1, tidx2, ctype):
         seg2 (array_like): Second segment.
         tidx1 (int): Index specifying the tail of the first segment.
         tidx2 (int): Index specifying the tail of the second segment.
-        ctype (int): Type of connection. 0 = T-H, 1 = H-T, 2 = H-H,
-        3 = T-T.
+        ctype (int): Type of connection. 0 = T-H, 1 = H-T, 2 = H-H, 3 = T-T.
+        max_dist (float, optional): Maximum allowed distance between the ends
+            of the the two segments.
 
     Returns:
         (array_like, int, bool): The merged segment, the index of the tail of
@@ -429,6 +425,7 @@ def _merge_two_segments(seg1, seg2, tidx1, tidx2, ctype):
             _connection_condition(
                 lax.dynamic_slice_in_dim(seg1[0], tidx1 - 1, 2),
                 lax.dynamic_slice_in_dim(seg2[0], 0, 2)[::-1],
+                max_dist=max_dist,
             ),
             dist_th < 1e-05,
         )
@@ -448,6 +445,7 @@ def _merge_two_segments(seg1, seg2, tidx1, tidx2, ctype):
             _connection_condition(
                 lax.dynamic_slice_in_dim(seg2[0], tidx2 - 1, 2),
                 lax.dynamic_slice_in_dim(seg1[0], 0, 2)[::-1],
+                max_dist=max_dist,
             ),
             dist_ht < 1e-05,
         )
@@ -467,6 +465,7 @@ def _merge_two_segments(seg1, seg2, tidx1, tidx2, ctype):
             _connection_condition(
                 lax.dynamic_slice_in_dim(seg1[0], 0, 2)[::-1],
                 lax.dynamic_slice_in_dim(seg2[0], 0, 2)[::-1],
+                max_dist=max_dist,
             ),
             dist_hh < 1e-05,
         )
@@ -486,6 +485,7 @@ def _merge_two_segments(seg1, seg2, tidx1, tidx2, ctype):
             _connection_condition(
                 lax.dynamic_slice_in_dim(seg1[0], tidx1 - 1, 2),
                 lax.dynamic_slice_in_dim(seg2[0], tidx2 - 1, 2),
+                max_dist=max_dist,
             ),
             dist_tt < 1e-05,
         )
@@ -512,7 +512,73 @@ def _merge_two_segments(seg1, seg2, tidx1, tidx2, ctype):
 
 
 @jit
-def _merge_open_segments(segments, mask_closed):
+def _get_segment_length(segment, tail_idx):
+    """Get the physical length of a segment."""
+    diff = jnp.diff(segment[0])
+    diff = diff.at[tail_idx].set(0.0)
+    return jnp.abs(diff).sum()
+
+
+@partial(jit, static_argnames=("max_dist", "max_nr_of_segments_in_contour"))
+def _merge_open_segments(
+    segments, mask_closed, max_nr_of_segments_in_contour=10, max_dist=5e-02
+):
+    """
+    Sequentially merge open segments until they form a closed contour. The
+    merging algorithm is as follows:
+
+        1. Pick random open segment, this is the current segment.
+        2. Find segments closest to current segment in terms of distance (H-H,
+        T-T, T-H and H-T), select 4 of the closest segments.
+        3. Evaluate the `_connection_condition` function for the current segment
+            and each of the 4 closest segments. Pick the segment for which the
+            condition is True and the distance is minimized.
+        4. Merge the current segment with the selected segment.
+        5. Repeat steps 2-4 until the current segment becomes a closed contour.
+            This will happen when there are no more open segments which satisfy
+            the connection condition.
+
+    Steps 1-5 are then repeated once more to account for the possibility of there
+    being a second contour composed of disjoint segments.
+
+    WARNING: This function is the most failure prone part of the whole method.
+    Here are some examples of possible failure modes:
+       - If too few points are used on the source star limb, there could be a
+       situation where the distance between the endpoints of two segments which
+       should be connected over a critical curve is greater than `max_dist`
+       in which case `_connection_condition` evaluates to False. In this case
+       the two segments won't be connected and we'll have an incomplete contour.
+       The solution is to increase the number of points used to solve the lens
+       equation on the source star limb.
+       - If none of the 4 closest segment ends satisfy the connection condition
+       and the contour is not closed. In this case the contour will be incomplete.
+       - In extreme cases, there could be a situation where a connection is made
+       between a segment belonging to one contour and a segment belonging to a
+       different contour because the segment belonging to the other contour is
+       closer in the distance than any of the segments from the first contour.
+       There is no simple way to handle this situation besides modifying the
+       `_connection_condition` function such that it somehow recognizes that
+       these two segments shouldn't be connected.
+       - The algorithm if there are more than two closed contours composed of
+       disjoint segments. I haven't seen an example of this situation, even for
+       triple lenses. It is trivial to fix by adding another iteration of the
+       merging algorithm.
+
+    Args:
+        segments (array_like): Array containing the segments, shape
+            (`n_segments`, 2, `n_points`).
+        mask_closed (array_like): Mask indicating which segments are closed to
+            begin with. Shape (`n_segments`).
+        max_nr_of_segments_in_contour (int): Maximum number of segments for a
+            closed contour. Should be at least 12 in case of triple lensing.
+            Default is 10.
+        max_dist (float): Maximum distance between two segment end points that
+            are allowed to be connected.
+
+    Returns:
+        array_like: Array of shape (`n_segments`, 2, `n_points`) containing
+        the closed contours.
+    """
     # Compute tail index for each segment
     tail_idcs = vmap(last_nonzero)(jnp.abs(segments[:, 0, :]))
 
@@ -522,14 +588,14 @@ def _merge_open_segments(segments, mask_closed):
     closed_segments = closed_segments[sorted_idcs(closed_segments)]  # sort
     open_segments = jnp.logical_not(mask_closed)[:, None, None] * segments
 
-    # Sort such that nonzero segments are first in order
-    sorted_idcs = jnp.argsort(jnp.abs(open_segments[:, 0, 0]))[::-1]
-    open_segments, tail_idcs = open_segments[sorted_idcs], tail_idcs[sorted_idcs]
+    # Sort open segments such that the shortest segments appear first
+    segment_lengths = vmap(_get_segment_length)(open_segments, tail_idcs)
+    _idcs = sparse_argsort(segment_lengths)
+    open_segments, tail_idcs = open_segments[_idcs], tail_idcs[_idcs]
 
     # Merge all open segments: start by selecting 0th open segment and then
     # sequantially merge it with other ones until a closed segment is formed
-    n_remaining = segments.shape[0] - 1
-    idcs = jnp.arange(0, n_remaining)
+    idcs = jnp.arange(0, max_nr_of_segments_in_contour)
 
     def body_fn(carry, idx_dummy):
         # Get the current segment, the index of its tail and all the other
@@ -570,15 +636,13 @@ def _merge_open_segments(segments, mask_closed):
         seg4, tidx4 = open_segments[idx4], tidcs[idx4]
 
         # First merge attempt
+        cond1 = jnp.all(seg1[0] == 0.0 + 0j)
         success1, seg_current_new, tidx_current_new = lax.cond(
-            jnp.all(seg1[0] == 0.0 + 0j),
-            lambda *args: (True, seg_current, tidx_current),
-            _merge_two_segments,
-            seg_current,
-            seg1,
-            tidx_current,
-            tidx1,
-            ctype1,
+            cond1,
+            lambda: (True, seg_current, tidx_current),
+            lambda: _merge_two_segments(
+                seg_current, seg1, tidx_current, tidx1, ctype1, max_dist=max_dist
+            ),
         )
 
         # Zero out the other segment if merge was successfull, otherwise do nothing
@@ -587,15 +651,13 @@ def _merge_open_segments(segments, mask_closed):
         )
 
         # Second merge attempt
+        cond2 = success1 | jnp.all(seg2[0] == 0.0 + 0j)
         success2, seg_current_new, tidx_current_new = lax.cond(
-            jnp.logical_or(success1, jnp.all(seg2[0] == 0.0 + 0j)),
-            lambda *args: (True, seg_current_new, tidx_current_new),
-            _merge_two_segments,
-            seg_current,
-            seg2,
-            tidx_current,
-            tidx2,
-            ctype2,
+            cond2,
+            lambda: (True, seg_current_new, tidx_current_new),
+            lambda: _merge_two_segments(
+                seg_current, seg2, tidx_current, tidx2, ctype2, max_dist=max_dist
+            ),
         )
 
         open_segments = open_segments.at[idx2].set(
@@ -607,15 +669,13 @@ def _merge_open_segments(segments, mask_closed):
         )
 
         # Third merge attempt
+        cond3 = success2 | jnp.all(seg3[0] == 0.0 + 0j)
         success3, seg_current_new, tidx_current_new = lax.cond(
-            jnp.logical_or(success2, jnp.all(seg3[0] == 0.0 + 0j)),
-            lambda *args: (True, seg_current_new, tidx_current_new),
-            _merge_two_segments,
-            seg_current,
-            seg3,
-            tidx_current,
-            tidx3,
-            ctype3,
+            cond3,
+            lambda: (True, seg_current_new, tidx_current_new),
+            lambda: _merge_two_segments(
+                seg_current, seg3, tidx_current, tidx3, ctype3, max_dist=max_dist
+            ),
         )
 
         open_segments = open_segments.at[idx3].set(
@@ -627,15 +687,13 @@ def _merge_open_segments(segments, mask_closed):
         )
 
         # Fourth merge attempt
+        cond4 = success3 | jnp.all(seg4[0] == 0.0 + 0j)
         success4, seg_current_new, tidx_current_new = lax.cond(
-            jnp.logical_or(success3, jnp.all(seg4[0] == 0.0 + 0j)),
-            lambda *args: (True, seg_current_new, tidx_current_new),
-            _merge_two_segments,
-            seg_current,
-            seg4,
-            tidx_current,
-            tidx4,
-            ctype4,
+            cond4,
+            lambda: (True, seg_current_new, tidx_current_new),
+            lambda: _merge_two_segments(
+                seg_current, seg4, tidx_current, tidx4, ctype4, max_dist=max_dist
+            ),
         )
 
         open_segments = open_segments.at[idx4].set(
@@ -646,7 +704,12 @@ def _merge_open_segments(segments, mask_closed):
             )
         )
 
-        return (seg_current_new, tidx_current_new, open_segments, tidcs), 0.0
+        return (
+            seg_current_new,
+            tidx_current_new,
+            open_segments,
+            tidcs,
+        ), 0.0
 
     init = (open_segments[0], tail_idcs[0], open_segments[1:], tail_idcs[1:])
     carry, _ = lax.scan(body_fn, init, idcs)
@@ -655,9 +718,8 @@ def _merge_open_segments(segments, mask_closed):
     # Store the merged closed segment
     closed_segments = closed_segments.at[-1].set(seg_merged)
 
-    # The remaining number of open segments
-    n_remaining -= 2  # previous run used up at least 2 segments
-    idcs = jnp.arange(0, n_remaining)
+    # previous run used up at least 2 segments
+    idcs = jnp.arange(0, max_nr_of_segments_in_contour - 2)
 
     init = (open_segments[0], tail_idcs[0], open_segments[1:], tail_idcs[1:])
     carry, _ = lax.scan(body_fn, init, idcs)
@@ -669,17 +731,26 @@ def _merge_open_segments(segments, mask_closed):
     return closed_segments
 
 
-@partial(jit, static_argnames=("n_contours"))
-def _get_contours(segments, segments_are_closed, n_contours=5):
+@partial(jit, static_argnames=("n_contours", "max_nr_of_segments_in_contour"))
+def _get_contours(
+    segments,
+    segments_are_closed,
+    n_contours=5,
+    max_nr_of_segments_in_contour=10,
+):
     """
-    Given disjoint segments as an input, merge them into closed contours - the
-    boundaries of the final images.
+    Given a set of image segments, some of which may be open, return closed contours
+    which are obtained by merging the open segments together.
 
     Args:
         segments (array_like): Array of shape `(n_segments, 2, n_points)`
             containing the segment points and the parity for each point.
         segments_are_closed (bool): False if not all segments are closed.
         n_contours (int, optional): Final number of contours. Defaults to 5.
+        max_nr_of_segments_in_contour (int): Maximum number of segments for a
+            closed contour. Should be at least 12 in case of triple lensing.
+            Default is 10.
+
 
     Returns:
         tuple: A tuple of (contours, parity) where `contours` is an array with
@@ -699,10 +770,12 @@ def _get_contours(segments, segments_are_closed, n_contours=5):
     # If the segments are closed do nothing, otherwise run the merging algorithm
     contours = lax.cond(
         segments_are_closed,
-        lambda *args: segments,
-        _merge_open_segments,
-        segments,
-        mask_closed,
+        lambda: segments,
+        lambda: _merge_open_segments(
+            segments,
+            mask_closed,
+            max_nr_of_segments_in_contour=max_nr_of_segments_in_contour,
+        ),
     )
 
     # Sort such that nonempty contours appear first
@@ -808,8 +881,8 @@ def _refine_contours_iteration(
 
     # We keep x_mid fixed and optimize y in range (y_mid - delta_y_mid, y_mid + delta_y_mid)
     # to find the exact location of the limb
-    lower = y_mid - 0.1 * jnp.take_along_axis(delta_y, idcs_maxdelta, axis=1)
-    upper = y_mid + 0.1 * jnp.take_along_axis(delta_y, idcs_maxdelta, axis=1)
+    lower = y_mid - 0.05 * jnp.take_along_axis(delta_y, idcs_maxdelta, axis=1)
+    upper = y_mid + 0.05 * jnp.take_along_axis(delta_y, idcs_maxdelta, axis=1)
 
     y_limb = vmap(vmap(bisect_y))(x_mid, lower, upper)
 
@@ -983,6 +1056,8 @@ def _integrate_unif(
         "npts_limb",
         "npts_ld",
         "integration_rule",
+        "n_intervals",
+        "n_iterations",
     ),
 )
 def mag_extended_source_binary(
@@ -993,6 +1068,8 @@ def mag_extended_source_binary(
     u=0.0,
     npts_limb=1000,
     npts_ld=301,
+    n_intervals=100,
+    n_iterations=3,
     integration_rule="trapezoidal",
 ):
     """
@@ -1025,14 +1102,19 @@ def mag_extended_source_binary(
         w, rho, nlenses=2, a=a, e1=e1, npts=npts_limb, npts_init=250
     )
     segments, cond_closed = _get_segments(images, images_mask, images_parity, nlenses=2)
-    contours, parity, tail_idcs = _get_contours(segments, cond_closed, n_contours=5)
+    contours, parity, tail_idcs = _get_contours(
+        segments,
+        cond_closed,
+        n_contours=5,
+        max_nr_of_segments_in_contour=10,
+    )
     contours, tail_idcs = _refine_contours(
         contours,
         tail_idcs,
         w,
         rho,
-        n_intervals=100,
-        n_iterations=3,
+        n_intervals=n_intervals,
+        n_iterations=n_iterations,
         nlenses=2,
         a=a,
         e1=e1,
@@ -1056,7 +1138,6 @@ def mag_extended_source_binary(
             nlenses=2,
             npts=npts_ld,
             integration_rule=integration_rule,
-            integration_rule=integration_rule,
             a=a,
             e1=e1,
         ),
@@ -1071,6 +1152,8 @@ def mag_extended_source_binary(
         "npts_limb",
         "npts_ld",
         "integration_rule",
+        "n_intervals",
+        "n_iterations",
     ),
 )
 def mag_extended_source_triple(
@@ -1081,8 +1164,10 @@ def mag_extended_source_triple(
     e2,
     rho,
     u=0.0,
-    npts_limb=1000,
+    npts_limb=1500,
     npts_ld=301,
+    n_intervals=100,
+    n_iterations=3,
     integration_rule="trapezoidal",
 ):
     """
@@ -1116,14 +1201,19 @@ def mag_extended_source_triple(
         w, rho, nlenses=3, a=a, r3=r3, e1=e1, e2=e2, npts=npts_limb, npts_init=250
     )
     segments, cond_closed = _get_segments(images, images_mask, images_parity, nlenses=3)
-    contours, parity, tail_idcs = _get_contours(segments, cond_closed, n_contours=5)
+    contours, parity, tail_idcs = _get_contours(
+        segments,
+        cond_closed,
+        n_contours=5,
+        max_nr_of_segments_in_contour=15,
+    )
     contours, tail_idcs = _refine_contours(
         contours,
         tail_idcs,
         w,
         rho,
-        n_intervals=100,
-        n_iterations=3,
+        n_intervals=n_intervals,
+        n_iterations=n_iterations,
         nlenses=3,
         a=a,
         r3=r3,
