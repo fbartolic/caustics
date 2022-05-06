@@ -238,6 +238,12 @@ def _process_segments(segments, nr_of_segments=20):
     # Split segments
     segments = jnp.concatenate(vmap(_split_single_segment)(segments))
 
+    # If a segment consists of a single point, set it to zero
+    mask_onepoint_segments = (
+        jnp.sum((segments[:, 0] != 0 + 0j).astype(int), axis=1) == 1
+    )
+    segments = segments * (~mask_onepoint_segments[:, None, None])
+
     # Sort segments such that the nonempty segments appear first and shrink array
     sorted_idcs = jnp.argsort(jnp.any(jnp.abs(segments[:, 0, :]) > 0.0, axis=1))[::-1]
     segments = segments[sorted_idcs]
@@ -315,20 +321,24 @@ def _concatenate_segments(segment_first, segment_second):
 @partial(jit, static_argnames=("max_dist"))
 def _connection_condition(line1, line2, max_dist=1e-01):
     """
-    Dermine weather two segments should be connected or not. The input to the
-    function are two arrays `line1` and `line2` consisting of the last (or first)
-    two points of points of contour segments. `line1` and `line2` each consist
-    of a starting point and an endpoint (in that order). We use four criterions
-    to determine if the segments should be connected:
+    Dermine weather two segments should be connected or not.
+
+    The input to the function are two arrays `line1` and `line2` consisting of
+    the last (or first) two points of points of contour segments. `line1` and
+    `line2` each consist of a starting point and an endpoint (in that order).
+    We use four criterions to determine if the segments should be connected:
         1. Distance between the endpoints of `line1` and `line2` is less than
         `max_dist`.
-        2. The angle between lines `line1` and `line2` is greater than 90 degrees.
-        3. If we divide the image plane into two half-planes by forming a line
-        passing throught the starting point of `line1` and the starting point
-        of `line2`, the endpoints of `line1` and `line2` must belong to the same
-        half-plane.
+        2. The smaller of the two angles formed by the intersection of `line1`
+            and `line2` is less than 60 degrees.
+        3. The distance between the point of intersection of `line1` and `line2`
+            and each of the endpoints of `line1` and `line2` is less than the 
+            distance between the two endpoints.
         4. Distance between ending points of `line1` and `line2` is less than
             the distance between start points.
+
+    If the distance between the two endpoints is less than 1e-05, the output
+    is `True` irrespective of the other conditions.
 
     Args:
         line1(array_like): Size 2 array containing two points in the complex
@@ -356,19 +366,23 @@ def _connection_condition(line1, line2, max_dist=1e-01):
     alpha = jnp.arccos(
         jnp.real(vec1) * jnp.real(vec2) + jnp.imag(vec1) * jnp.imag(vec2)
     )
-    cond2 = jnp.rad2deg(alpha) > 90.0
+    cond2 = (180 - jnp.rad2deg(alpha)) < 60.0
 
-    # Eq. of a line through points (x1, y1), (x3, y3)
-    y = lambda x: y1 + (y3 - y1) / (x3 - x1) * (x - x1)
+    # Point of intersection point of the two lines
+    D = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
+    px = ((x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4)) / D
+    py = ((x1 * y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3 * y4 - y3 * x4)) / D
+    p = px + 1j * py
 
-    # Check if points (x2, y2) and (x4, y4) are in the same half-plane
-    cond3 = jnp.logical_xor(y2 > y(x2), y4 > y(x4)) == False
+    # Require that the intersection point is at most `dist` away from the
+    # two endpoints
+    cond3 = (jnp.abs(line1[1] - p) < dist) & (jnp.abs(line2[1] - p) < dist)
 
     # Distance between endpoints of line1 and line2 has to be smaller than the
     # distance between points where the line begins
     cond4 = jnp.abs(line1[1] - line2[1]) < jnp.abs(line1[0] - line2[0])
 
-    return cond1 & cond2 & cond3 & cond4
+    return jnp.logical_or(cond1 & cond2 & cond3 & cond4, dist < 1e-05)
 
 
 @partial(jit, static_argnames=("max_dist"))
@@ -420,14 +434,10 @@ def _merge_two_segments(seg1, seg2, tidx1, tidx2, ctype, max_dist=1e-01):
         return seg_merged, tidx1 + tidx2 + 1, True
 
     def case1(seg1, seg2, tidx1, tidx2):
-        dist_th = jnp.abs(seg1[0, tidx1] - seg2[0, 0])
-        cond = jnp.logical_or(
-            _connection_condition(
-                lax.dynamic_slice_in_dim(seg1[0], tidx1 - 1, 2),
-                lax.dynamic_slice_in_dim(seg2[0], 0, 2)[::-1],
-                max_dist=max_dist,
-            ),
-            dist_th < 1e-05,
+        cond = _connection_condition(
+            lax.dynamic_slice_in_dim(seg1[0], tidx1 - 1, 2),
+            lax.dynamic_slice_in_dim(seg2[0], 0, 2)[::-1],
+            max_dist=max_dist,
         )
         return lax.cond(
             cond,
@@ -440,14 +450,10 @@ def _merge_two_segments(seg1, seg2, tidx1, tidx2, ctype, max_dist=1e-01):
         )
 
     def case2(seg1, seg2, tidx1, tidx2):
-        dist_ht = jnp.abs(seg1[0, 0] - seg2[0, tidx2])
-        cond = jnp.logical_or(
-            _connection_condition(
-                lax.dynamic_slice_in_dim(seg2[0], tidx2 - 1, 2),
-                lax.dynamic_slice_in_dim(seg1[0], 0, 2)[::-1],
-                max_dist=max_dist,
-            ),
-            dist_ht < 1e-05,
+        cond = _connection_condition(
+            lax.dynamic_slice_in_dim(seg2[0], tidx2 - 1, 2),
+            lax.dynamic_slice_in_dim(seg1[0], 0, 2)[::-1],
+            max_dist=max_dist,
         )
         return lax.cond(
             cond,
@@ -460,14 +466,10 @@ def _merge_two_segments(seg1, seg2, tidx1, tidx2, ctype, max_dist=1e-01):
         )
 
     def case3(seg1, seg2, tidx1, tidx2):
-        dist_hh = jnp.abs(seg1[0, 0] - seg2[0, 0])
-        cond = jnp.logical_or(
-            _connection_condition(
-                lax.dynamic_slice_in_dim(seg1[0], 0, 2)[::-1],
-                lax.dynamic_slice_in_dim(seg2[0], 0, 2)[::-1],
-                max_dist=max_dist,
-            ),
-            dist_hh < 1e-05,
+        cond = _connection_condition(
+            lax.dynamic_slice_in_dim(seg1[0], 0, 2)[::-1],
+            lax.dynamic_slice_in_dim(seg2[0], 0, 2)[::-1],
+            max_dist=max_dist,
         )
         return lax.cond(
             cond,
@@ -480,14 +482,10 @@ def _merge_two_segments(seg1, seg2, tidx1, tidx2, ctype, max_dist=1e-01):
         )
 
     def case4(seg1, seg2, tidx1, tidx2):
-        dist_tt = jnp.abs(seg1[0, tidx1] - seg2[0, tidx2])
-        cond = jnp.logical_or(
-            _connection_condition(
-                lax.dynamic_slice_in_dim(seg1[0], tidx1 - 1, 2),
-                lax.dynamic_slice_in_dim(seg2[0], tidx2 - 1, 2),
-                max_dist=max_dist,
-            ),
-            dist_tt < 1e-05,
+        cond = _connection_condition(
+            lax.dynamic_slice_in_dim(seg1[0], tidx1 - 1, 2),
+            lax.dynamic_slice_in_dim(seg2[0], tidx2 - 1, 2),
+            max_dist=max_dist,
         )
         return lax.cond(
             cond,
@@ -636,10 +634,9 @@ def _merge_open_segments(
         seg4, tidx4 = open_segments[idx4], tidcs[idx4]
 
         # First merge attempt
-        cond1 = jnp.all(seg1[0] == 0.0 + 0j)
         success1, seg_current_new, tidx_current_new = lax.cond(
-            cond1,
-            lambda: (True, seg_current, tidx_current),
+            jnp.all(seg1[0] == 0.0 + 0j),
+            lambda: (False, seg_current, tidx_current),
             lambda: _merge_two_segments(
                 seg_current, seg1, tidx_current, tidx1, ctype1, max_dist=max_dist
             ),
@@ -651,13 +648,12 @@ def _merge_open_segments(
         )
 
         # Second merge attempt
-        cond2 = success1 | jnp.all(seg2[0] == 0.0 + 0j)
         success2, seg_current_new, tidx_current_new = lax.cond(
-            cond2,
-            lambda: (True, seg_current_new, tidx_current_new),
+            ~success1,
             lambda: _merge_two_segments(
                 seg_current, seg2, tidx_current, tidx2, ctype2, max_dist=max_dist
             ),
+            lambda: (False, seg_current_new, tidx_current_new),
         )
 
         open_segments = open_segments.at[idx2].set(
@@ -669,36 +665,34 @@ def _merge_open_segments(
         )
 
         # Third merge attempt
-        cond3 = success2 | jnp.all(seg3[0] == 0.0 + 0j)
         success3, seg_current_new, tidx_current_new = lax.cond(
-            cond3,
-            lambda: (True, seg_current_new, tidx_current_new),
+            ~success1 & ~success2,
             lambda: _merge_two_segments(
                 seg_current, seg3, tidx_current, tidx3, ctype3, max_dist=max_dist
             ),
+            lambda: (False, seg_current_new, tidx_current_new),
         )
 
         open_segments = open_segments.at[idx3].set(
             jnp.where(
-                ~success1 & ~success2,
+                ~success1 & ~success2 & success3,
                 jnp.zeros_like(open_segments[0]),
                 open_segments[idx3],
             )
         )
 
         # Fourth merge attempt
-        cond4 = success3 | jnp.all(seg4[0] == 0.0 + 0j)
         success4, seg_current_new, tidx_current_new = lax.cond(
-            cond4,
-            lambda: (True, seg_current_new, tidx_current_new),
+            ~success1 & ~success2 & ~success3,
             lambda: _merge_two_segments(
                 seg_current, seg4, tidx_current, tidx4, ctype4, max_dist=max_dist
             ),
+            lambda: (False, seg_current_new, tidx_current_new),
         )
 
         open_segments = open_segments.at[idx4].set(
             jnp.where(
-                ~success1 & ~success2 & ~success3,
+                ~success1 & ~success2 & ~success3 & success4,
                 jnp.zeros_like(open_segments[0]),
                 open_segments[idx4],
             )
@@ -718,7 +712,7 @@ def _merge_open_segments(
     # Store the merged closed segment
     closed_segments = closed_segments.at[-1].set(seg_merged)
 
-    # previous run used up at least 2 segments
+    # Repeat the whole procedure once again
     idcs = jnp.arange(0, max_nr_of_segments_in_contour - 2)
 
     init = (open_segments[0], tail_idcs[0], open_segments[1:], tail_idcs[1:])
@@ -731,12 +725,15 @@ def _merge_open_segments(
     return closed_segments
 
 
-@partial(jit, static_argnames=("n_contours", "max_nr_of_segments_in_contour"))
+@partial(
+    jit, static_argnames=("n_contours", "max_nr_of_segments_in_contour", "max_dist")
+)
 def _get_contours(
     segments,
     segments_are_closed,
     n_contours=5,
     max_nr_of_segments_in_contour=10,
+    max_dist=1e-01,
 ):
     """
     Given a set of image segments, some of which may be open, return closed contours
@@ -775,6 +772,7 @@ def _get_contours(
             segments,
             mask_closed,
             max_nr_of_segments_in_contour=max_nr_of_segments_in_contour,
+            max_dist=max_dist,
         ),
     )
 
@@ -783,7 +781,7 @@ def _get_contours(
     contours = contours[sorted_idcs(contours)][:n_contours]
 
     # Extract per-contour parity values
-    parity = jnp.sign(contours[:, 1, 0])
+    parity = jnp.sign(contours[:, 1, 0].astype(float))
     contours = contours[:, 0, :]
 
     # Set the last point in each contour to be equal to the first point
