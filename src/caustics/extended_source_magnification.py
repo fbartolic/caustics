@@ -8,12 +8,10 @@ __all__ = [
 ]
 
 from functools import partial
-from tkinter import W
 
 import numpy as np
 import jax.numpy as jnp
-from jax import jit, vmap, lax, random
-import jax.scipy as jsp
+from jax import jit, vmap, lax
 
 from . import (
     images_point_source_binary,
@@ -28,47 +26,11 @@ from .point_source_magnification import (
     lens_eq_jac_det_triple,
 )
 
-from jaxopt import Bisection
 
-
-@partial(jit, static_argnames=("n_samples"))
-def _inverse_transform_sampling(key, xp, fp, n_samples=1000):
-    """
-    Given function values fp at points xp, return `n_samples` samples from
-    a pdf which approximates this function using inverse transform sampling.
-
-    Args:
-        key (jax rng key): JAX PRNG key.
-        xp (array_like): points at which fp is evaluated.
-        fp (array_like): function values.
-        n_samples (int, optional): Number of samples from the pdf. Defaults to
-            1000.
-
-    Returns:
-        array_like: Samples from the target pdf.
-    """
-    cum_values = jnp.cumsum(fp)
-    cum_values /= jnp.max(cum_values)
-    r = random.uniform(key, (n_samples,))
-    inv_cdf = jnp.interp(r, cum_values, xp)
-    return inv_cdf
-
-
-@partial(jit, static_argnames=("nlenses", "npts", "npts_init", "compensated"))
+@partial(jit, static_argnames=("nlenses", "npts_init", "niter", "compensated"))
 def _images_of_source_limb(
-    w_center, rho, nlenses=2, npts=1000, npts_init=250, compensated=False, **kwargs
+    w_center, rho, nlenses=2, npts_init=500, niter=6, compensated=False, **kwargs
 ):
-    """
-    Compute the images of a sequence of points on the limb of the source star.
-    We use inverse transform sampling to get a higher density of points where
-    the gradient in the magnifcation is large (at caustic crossings).
-    """
-    theta_init = jnp.linspace(-np.pi, np.pi, npts_init - 1, endpoint=False)
-    theta_init = jnp.pad(theta_init, (0, 1), constant_values=np.pi - 1e-05)
-    x = rho * jnp.cos(theta_init) + jnp.real(w_center)
-    y = rho * jnp.sin(theta_init) + jnp.imag(w_center)
-    w_init = x + 1j * y
-
     if nlenses == 2:
         get_images = lambda w: images_point_source_binary(
             w, kwargs["a"], kwargs["e1"], compensated=compensated
@@ -87,49 +49,46 @@ def _images_of_source_limb(
             im, kwargs["a"], kwargs["r3"], kwargs["e1"], kwargs["e2"]
         )
 
-    images_init, mask_init = get_images(w_init)
-    det_init = get_det(images_init)
-    mag_init = jnp.sum((1.0 / jnp.abs(det_init)) * mask_init, axis=0)
+    # Initial sampling on the source limb
+    theta = jnp.linspace(-np.pi, np.pi, npts_init - 1, endpoint=False)
+    theta = jnp.pad(theta, (0, 1), constant_values=np.pi - 1e-05)
+    images, mask_images = get_images(rho * jnp.exp(1j * theta) + w_center)
+    det = get_det(images)
+    parity = jnp.sign(det)
+    mag = jnp.sum((1.0 / jnp.abs(det)) * mask_images, axis=0)
 
-    # Resample around high magnification regions
-    window_size = 20
-    window = jsp.stats.norm.pdf(jnp.linspace(-3, 3, window_size))
-    conv = lambda x: jnp.convolve(x, window, mode="same")
-    pdf = conv(jnp.abs(jnp.gradient(mag_init)))
-    key = random.PRNGKey(42)
-    theta_dense = _inverse_transform_sampling(
-        key, theta_init, pdf, n_samples=npts
-    ).sort()
+    # Refine sampling by placing geometrically fewer points each iteration
+    # in the regions where the magnification gradient is largest
+    npts_list = np.geomspace(2, npts_init, niter, endpoint=False, dtype=int)[::-1]
 
-    # Make sure that there are no exact duplicate values in theta_dense and that
-    # no value is common with theta_init
-    mask_duplicate = jnp.ones(len(theta_dense), dtype=bool)
-    mask_duplicate = mask_duplicate.at[
-        jnp.unique(theta_dense, return_index=True, size=len(theta_dense))[1]
-    ].set(False)
-    mask_common = jnp.isin(theta_dense, theta_init, assume_unique=True)
-    mask = jnp.logical_or(mask_duplicate, mask_common)
-    theta_dense += mask * random.uniform(
-        key, theta_dense.shape, maxval=1e-05
-    )  # small perturbation
+    for _npts in npts_list:
+        # Resample theta
+        delta_mag = jnp.concatenate([jnp.diff(mag), jnp.zeros(1)])
+        idcs_maxdelta = jnp.argsort(jnp.abs(delta_mag))[::-1][:_npts]
 
-    x = rho * jnp.cos(theta_dense) + jnp.real(w_center)
-    y = rho * jnp.sin(theta_dense) + jnp.imag(w_center)
-    w_dense = x + 1j * y
+        #        theta_patch = jnp.linspace(
+        #            theta[idcs_maxdelta], theta[idcs_maxdelta + 1], 5
+        #        )[1:-1, :].reshape(-1)
 
-    # Compute images at points biased towards higher magnification
-    images_dense, mask_dense = get_images(w_dense)
-    det_dense = get_det(images_dense)
+        theta_patch = 0.5 * (theta[idcs_maxdelta] + theta[idcs_maxdelta + 1])
 
-    # Combine pts
-    theta = jnp.hstack([theta_init, theta_dense])
+        images_patch, mask_images_patch = get_images(
+            rho * jnp.exp(1j * theta_patch) + w_center
+        )
+        det_patch = get_det(images_patch)
+        mag_patch = jnp.sum((1.0 / jnp.abs(det_patch)) * mask_images_patch, axis=0)
 
-    sorted_idcs = jnp.argsort(theta)
-    images = jnp.hstack([images_init, images_dense])[:, sorted_idcs]
-    mask = jnp.hstack([mask_init, mask_dense])[:, sorted_idcs]
-    parity = jnp.sign(jnp.hstack([det_init, det_dense]))[:, sorted_idcs]
+        theta = jnp.concatenate([theta, theta_patch])
+        sorted_idcs = jnp.argsort(theta)
+        theta = theta[sorted_idcs]
 
-    return images, mask, parity
+        mag = jnp.concatenate([mag, mag_patch])[sorted_idcs]
+        images = jnp.hstack([images, images_patch])[:, sorted_idcs]
+        mask_images = jnp.hstack([mask_images, mask_images_patch])[:, sorted_idcs]
+        det = jnp.hstack([det, det_patch])[:, sorted_idcs]
+        parity = jnp.sign(det)
+
+    return images, mask_images, parity
 
 
 @partial(jit, backend="cpu")
@@ -332,7 +291,7 @@ def _connection_condition(line1, line2, max_dist=1e-01):
         2. The smaller of the two angles formed by the intersection of `line1`
             and `line2` is less than 60 degrees.
         3. The distance between the point of intersection of `line1` and `line2`
-            and each of the endpoints of `line1` and `line2` is less than the 
+            and each of the endpoints of `line1` and `line2` is less than the
             distance between the two endpoints.
         4. Distance between ending points of `line1` and `line2` is less than
             the distance between start points.
@@ -819,107 +778,6 @@ def _brightness_profile(z, rho, w_center, u=0.1, nlenses=2, **kwargs):
     return I
 
 
-@partial(jit, static_argnames=("nlenses"))
-def _fn_indicator(x, y, w_cent, rho, nlenses=2, **kwargs):
-    """
-    Evaluates to 0.5 if point (x, y) is inside the image,
-    otherwise it is -0.5.
-    """
-    if nlenses == 2:
-        w = lens_eq_binary(x + 1j * y, kwargs["a"], kwargs["e1"])
-    elif nlenses == 3:
-        w = lens_eq_triple(
-            x + 1j * y, kwargs["a"], kwargs["r3"], kwargs["e1"], kwargs["e2"]
-        )
-    else:
-        raise ValueError("`nlenses` has to be set to either 2 or 3")
-    xs = jnp.real(w) - jnp.real(w_cent)
-    ys = jnp.imag(w) - jnp.imag(w_cent)
-    cond = xs**2 + ys**2 <= rho**2
-    return cond.astype(float) - 0.5
-
-
-@partial(jit, static_argnames=("nlenses", "n_intervals"))
-def _refine_contours_iteration(
-    contours, tail_idcs, w_center, rho, n_intervals=50, nlenses=2, **kwargs
-):
-    # Compute spacing between consecutive points
-    diff = jnp.pad(jnp.diff(contours, axis=1), ((0, 0), (0, 1)))
-    delta_x, delta_y = jnp.real(diff), jnp.imag(diff)
-    delta = jnp.abs(diff)
-    delta = vmap(lambda x, i: x.at[i].set(0.0))(delta, tail_idcs)
-
-    # Get idcs of points with largest spacing
-    idcs_maxdelta = jnp.argsort(delta, axis=1)[:, ::-1][:, :n_intervals]
-    idcs_maxdelta = jnp.sort(idcs_maxdelta, axis=1)
-
-    # Generate points at the midpoints of the intervals
-    x = jnp.real(contours)
-    y = jnp.imag(contours)
-
-    x1 = jnp.take_along_axis(x, idcs_maxdelta, axis=1)
-    y1 = jnp.take_along_axis(y, idcs_maxdelta, axis=1)
-    x2 = jnp.take_along_axis(x, idcs_maxdelta + 1, axis=1)
-    y2 = jnp.take_along_axis(y, idcs_maxdelta + 1, axis=1)
-
-    x_mid = 0.5 * (x1 + x2)
-    y_mid = 0.5 * (y1 + y2)
-
-    # Solve optimization problem to refine estimate of y
-    def bisect_y(x, lower, upper, tol=1e-08):
-        val, state = Bisection(
-            lambda y: _fn_indicator(x, y, w_center, rho, nlenses=nlenses, **kwargs),
-            lower=lower,
-            upper=upper,
-            maxiter=50,
-            tol=tol,
-            check_bracket=False,
-        ).run()
-        return val
-
-    # We keep x_mid fixed and optimize y in range (y_mid - delta_y_mid, y_mid + delta_y_mid)
-    # to find the exact location of the limb
-    lower = y_mid - 0.05 * jnp.take_along_axis(delta_y, idcs_maxdelta, axis=1)
-    upper = y_mid + 0.05 * jnp.take_along_axis(delta_y, idcs_maxdelta, axis=1)
-
-    y_limb = vmap(vmap(bisect_y))(x_mid, lower, upper)
-
-    x_ext = vmap(lambda x, xin, idcs: jnp.insert(x, idcs, xin))(
-        x, x_mid, idcs_maxdelta + 1
-    )
-    y_ext = vmap(lambda x, xin, idcs: jnp.insert(x, idcs, xin))(
-        y, y_limb, idcs_maxdelta + 1
-    )
-
-    tail_idcs += n_intervals
-
-    return x_ext + 1j * y_ext, tail_idcs
-
-
-@partial(jit, static_argnames=("nlenses", "n_intervals", "n_iterations"))
-def _refine_contours(
-    contours,
-    tail_idcs,
-    w_center,
-    rho,
-    n_intervals=10,
-    n_iterations=3,
-    nlenses=2,
-    **kwargs
-):
-    for i in range(n_iterations):
-        contours, tail_idcs = _refine_contours_iteration(
-            contours,
-            tail_idcs,
-            w_center,
-            rho,
-            n_intervals=n_intervals,
-            nlenses=nlenses,
-            **kwargs
-        )
-    return contours, tail_idcs
-
-
 @partial(
     jit, static_argnames=("nlenses", "npts", "integration_rule", "integration_rule")
 )
@@ -1052,10 +910,9 @@ def _integrate_unif(
     jit,
     static_argnames=(
         "npts_limb",
+        "niter_limb",
         "npts_ld",
         "integration_rule",
-        "n_intervals",
-        "n_iterations",
     ),
 )
 def mag_extended_source_binary(
@@ -1064,10 +921,9 @@ def mag_extended_source_binary(
     e1,
     rho,
     u=0.0,
-    npts_limb=1000,
+    npts_limb=250,
+    niter_limb=10,
     npts_ld=301,
-    n_intervals=100,
-    n_iterations=3,
     integration_rule="trapezoidal",
 ):
     """
@@ -1083,9 +939,20 @@ def mag_extended_source_binary(
             follows that e2 = 1 - e1.
         rho (float): Source radius in Einstein radii.
         u (float, optional): Linear limb darkening coefficient. Defaults to 0..
-        npts_limb (int, optional): Total number of points on the source limb for
-            which we evaluate the images. This will determine the accuracy of
-            the magnification calculation.
+        npts_limb (int, optional): Initial number of points uniformly distributed
+            on the source limb when computing the point source magnification.
+            The final number of points depends on this value and `niter_limb`
+            because additional points are added iteratively in a geometric
+            fashion. This parameters determines the precision of the magnification
+            calculation (absent limb-darkening, in which case `npts_ld` is also
+            important). The default value should keep the relative error well
+            below 10^{-3} in all cases. Defaults to 250.
+        niter_limb (int, optional): Number of iterations to use for the point
+            source magnification evaluation on the source limb. At each
+            iteration we geometrically decrease the number of points starting
+            with `npts_limb` and ending with 2 for the final iteration. The new
+            points are placed where the gradient of the magnification is
+            largest. Deaults to 10.
         npts_ld (int, optional): Number of points at which the stellar
             brightness function is evaluated when computing the integrals P and
             Q defined in Dominik 1998. Defaults to 100.
@@ -1097,7 +964,13 @@ def mag_extended_source_binary(
         float: Total magnification factor.
     """
     images, images_mask, images_parity = _images_of_source_limb(
-        w, rho, nlenses=2, a=a, e1=e1, npts=npts_limb, npts_init=250
+        w,
+        rho,
+        nlenses=2,
+        a=a,
+        e1=e1,
+        npts_init=npts_limb,
+        niter=niter_limb,
     )
     segments, cond_closed = _get_segments(images, images_mask, images_parity, nlenses=2)
     contours, parity, tail_idcs = _get_contours(
@@ -1105,17 +978,6 @@ def mag_extended_source_binary(
         cond_closed,
         n_contours=5,
         max_nr_of_segments_in_contour=10,
-    )
-    contours, tail_idcs = _refine_contours(
-        contours,
-        tail_idcs,
-        w,
-        rho,
-        n_intervals=n_intervals,
-        n_iterations=n_iterations,
-        nlenses=2,
-        a=a,
-        e1=e1,
     )
 
     mag = lax.cond(
@@ -1148,10 +1010,9 @@ def mag_extended_source_binary(
     jit,
     static_argnames=(
         "npts_limb",
+        "niter_limb",
         "npts_ld",
         "integration_rule",
-        "n_intervals",
-        "n_iterations",
     ),
 )
 def mag_extended_source_triple(
@@ -1162,10 +1023,9 @@ def mag_extended_source_triple(
     e2,
     rho,
     u=0.0,
-    npts_limb=1500,
+    npts_limb=250,
+    niter_limb=10,
     npts_ld=301,
-    n_intervals=100,
-    n_iterations=3,
     integration_rule="trapezoidal",
 ):
     """
@@ -1181,10 +1041,20 @@ def mag_extended_source_triple(
         e2 (array_like): Mass fraction of the second lens e2 = m2/(m1 + m2 + m3).
         rho (float): Source radius in Einstein radii.
         u (float, optional): Linear limb darkening coefficient. Defaults to 0..
-        npts_limb (int, optional): Total number of points on the source limb for
-            which we evaluate the images This is a key input to the method which
-            determines the accuracy of the magnification calculation. Defaults
-            to 2000.
+        npts_limb (int, optional): Initial number of points uniformly distributed
+            on the source limb when computing the point source magnification.
+            The final number of points depends on this value and `niter_limb`
+            because additional points are added iteratively in a geometric
+            fashion. This parameters determines the precision of the magnification
+            calculation (absent limb-darkening, in which case `npts_ld` is also
+            important). The default value should keep the relative error well
+            below 10^{-3} in all cases. Defaults to 250.
+        niter_limb (int, optional): Number of iterations to use for the point
+            source magnification evaluation on the source limb. At each
+            iteration we geometrically decrease the number of points starting
+            with `npts_limb` and ending with 2 for the final iteration. The new
+            points are placed where the gradient of the magnification is
+            largest. Deaults to 10.
         npts_ld (int, optional): Number of points at which the stellar
             brightness function is evaluated when computing the integrals P and
             Q defined in Dominik 1998. Defaults to 100.
@@ -1196,7 +1066,15 @@ def mag_extended_source_triple(
         float: Total magnification factor.
     """
     images, images_mask, images_parity = _images_of_source_limb(
-        w, rho, nlenses=3, a=a, r3=r3, e1=e1, e2=e2, npts=npts_limb, npts_init=250
+        w,
+        rho,
+        nlenses=3,
+        a=a,
+        r3=r3,
+        e1=e1,
+        e2=e2,
+        npts_init=npts_limb,
+        niter=niter_limb,
     )
     segments, cond_closed = _get_segments(images, images_mask, images_parity, nlenses=3)
     contours, parity, tail_idcs = _get_contours(
@@ -1204,19 +1082,6 @@ def mag_extended_source_triple(
         cond_closed,
         n_contours=5,
         max_nr_of_segments_in_contour=15,
-    )
-    contours, tail_idcs = _refine_contours(
-        contours,
-        tail_idcs,
-        w,
-        rho,
-        n_intervals=n_intervals,
-        n_iterations=n_iterations,
-        nlenses=3,
-        a=a,
-        r3=r3,
-        e1=e1,
-        e2=e2,
     )
 
     mag = lax.cond(
