@@ -17,7 +17,6 @@ from caustics.extended_source_magnification import (
     _get_contours,
     _connection_condition,
 )
-from caustics.utils import last_nonzero
 from caustics import (
     critical_and_caustic_curves_binary,
     critical_and_caustic_curves_triple,
@@ -27,12 +26,7 @@ from caustics import (
 
 config.update("jax_enable_x64", True)
 
-import TripleLensing
-
-TRIL = TripleLensing.TripleLensing()
-
 from MulensModel.binarylensimports import _adaptive_contouring_linear
-
 
 def mag_adaptive_cont(w_center, rho, a, e1, u=0.1, eps=1e-04, eps_ld=1e-04):
     x_cm = (e1 - (1.0 - e1)) * a
@@ -47,61 +41,6 @@ def mag_adaptive_cont(w_center, rho, a, e1, u=0.1, eps=1e-04, eps_ld=1e-04):
         eps_ld,
     )
 
-
-def mag_trilens_triple(
-    w_center,
-    rho,
-    a,
-    r3,
-    e1,
-    e2,
-    secnum=145,
-    basenum=2,
-    quaderr_Tol=1e-3,
-    relerr_Tol=1e-4,
-):
-    return TRIL.TriLightCurve(
-        [e1, e2, 1 - e1 - e2],
-        [a, 0, -a, 0, jnp.real(r3), jnp.imag(r3)],
-        [jnp.real(w_center)],
-        [jnp.imag(w_center)],
-        rho,
-        secnum,
-        basenum,
-        quaderr_Tol,
-        relerr_Tol,
-    )[0]
-
-
-def mag_trilens_triple_ld(
-    w_center,
-    rho,
-    a,
-    r3,
-    e1,
-    e2,
-    u=0.1,
-    secnum=145,
-    basenum=2,
-    quaderr_Tol=1e-3,
-    relerr_Tol=1e-4,
-    RelTolLimb=1e-2,
-    AbsTolLimb=1e-2,
-):
-    return TRIL.TriLightCurveLimb(
-        [e1, e2, 1 - e1 - e2],
-        [a, 0, -a, 0, jnp.real(r3), jnp.imag(r3)],
-        [jnp.real(w_center)],
-        [jnp.imag(w_center)],
-        rho,
-        secnum,
-        basenum,
-        quaderr_Tol,
-        relerr_Tol,
-        RelTolLimb,
-        AbsTolLimb,
-        u,
-    )[0]
 
 
 def test_images_of_source_limb():
@@ -171,7 +110,6 @@ def test_get_segments():
             r3=r3,
             e1=e1,
             e2=e2,
-            npts=1000,
         )
         segments, cond_closed = _get_segments(
             images, images_mask, images_parity, nlenses=3
@@ -208,7 +146,7 @@ def test_get_contours(rho):
     a, e1, e2, r3 = 0.698, 0.02809, 0.9687, -0.0197 - 0.95087j
 
     critical_curves, caustic_curves = critical_and_caustic_curves_triple(
-        a, r3, e1, e2, npts=20
+        a, r3, e1, e2, npts=10
     )
 
     key = random.PRNGKey(42)
@@ -270,7 +208,7 @@ def test_mag_extended_source_binary(rho, max_err=1e-03):
         0.45,
         0.8,
     )
-    critical_curves, caustic_curves = critical_and_caustic_curves_binary(a, e1, npts=20)
+    critical_curves, caustic_curves = critical_and_caustic_curves_binary(a, e1, npts=10)
 
     key = random.PRNGKey(42)
     key, subkey1, subkey2 = random.split(key, num=3)
@@ -304,3 +242,60 @@ def test_mag_extended_source_binary(rho, max_err=1e-03):
     )
 
     assert np.all(np.abs((mags - mags_ac) / mags_ac) < max_err)
+
+
+@pytest.mark.parametrize("rho", [1e-01, 1e-02])
+def test_mag_extended_source_binary_limb_darkening(rho, max_err=1e-03):
+    a, e1, = (
+        0.45,
+        0.8,
+    )
+    critical_curves, caustic_curves = critical_and_caustic_curves_binary(a, e1, npts=10)
+
+    key = random.PRNGKey(42)
+    key, subkey1, subkey2 = random.split(key, num=3)
+
+    # Generate random test points near the caustics
+    w_test = (
+        caustic_curves
+        + random.uniform(subkey1, caustic_curves.shape, minval=-2 * rho, maxval=2 * rho)
+        + 1j
+        * random.uniform(subkey1, caustic_curves.shape, minval=-2 * rho, maxval=2 * rho)
+    )
+
+    # Compute the magnification with `caustics` and adaptive contouring
+    mags = vmap(
+        lambda w: mag_extended_source_binary(
+            w,
+            a,
+            e1,
+            rho,
+            u=0.25,
+            npts_limb=250,
+            niter_limb=8,
+        )
+    )(w_test)
+
+    mags_ac = np.array(
+        [
+            mag_adaptive_cont(w, rho, a, e1, u=0.25, eps=1e-02, eps_ld=1e-04)
+            for w in w_test
+        ]
+    )
+
+    assert np.all(np.abs((mags - mags_ac) / mags_ac) < max_err)
+
+
+def test_grad_mag_extended_source_binary(rho=1e-02):
+    a, e1, = (
+        0.45,
+        0.8,
+    )
+    critical_curves, caustic_curves = critical_and_caustic_curves_binary(a, e1, npts=1)
+    w = caustic_curves[0]
+
+    f = lambda a: mag_extended_source_binary(w, a, e1, rho, u=0.2)
+    check_grads(f, (a,), 1, rtol=5e-03)
+
+    f = lambda rho: mag_extended_source_binary(w, a, e1, rho, u=0.2)
+    check_grads(f, (rho,), 1, rtol=5e-03)
