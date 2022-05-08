@@ -291,8 +291,8 @@ def _connection_condition(line1, line2, max_dist=1e-01):
         2. The smaller of the two angles formed by the intersection of `line1`
             and `line2` is less than 60 degrees.
         3. The distance between the point of intersection of `line1` and `line2`
-            and each of the endpoints of `line1` and `line2` is less than the
-            distance between the two endpoints.
+            and each of the endpoints of `line1` and `line2` is less than
+            `max_dist`.
         4. Distance between ending points of `line1` and `line2` is less than
             the distance between start points.
 
@@ -333,9 +333,9 @@ def _connection_condition(line1, line2, max_dist=1e-01):
     py = ((x1 * y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3 * y4 - y3 * x4)) / D
     p = px + 1j * py
 
-    # Require that the intersection point is at most `dist` away from the
+    # Require that the intersection point is at most `max_dist` away from the
     # two endpoints
-    cond3 = (jnp.abs(line1[1] - p) < dist) & (jnp.abs(line2[1] - p) < dist)
+    cond3 = (jnp.abs(line1[1] - p) < max_dist) & (jnp.abs(line2[1] - p) < max_dist)
 
     # Distance between endpoints of line1 and line2 has to be smaller than the
     # distance between points where the line begins
@@ -763,7 +763,7 @@ def _brightness_profile(z, rho, w_center, u=0.1, nlenses=2, **kwargs):
         raise ValueError("`nlenses` has to be set to either 2 or 3")
 
     r = jnp.abs(w - w_center) / rho
-    # See Dominik 1998 for details
+
     def safe_for_grad_sqrt(x):
         return jnp.sqrt(jnp.where(x > 0.0, x, 0.0))
 
@@ -778,20 +778,9 @@ def _brightness_profile(z, rho, w_center, u=0.1, nlenses=2, **kwargs):
     return I
 
 
-@partial(
-    jit, static_argnames=("nlenses", "npts", "integration_rule", "integration_rule")
-)
+@partial(jit, static_argnames=("nlenses", "npts"))
 def _integrate_ld(
-    w_center,
-    rho,
-    contours,
-    parity,
-    tail_idcs,
-    u=0.0,
-    nlenses=2,
-    npts=301,
-    integration_rule="trapezoidal",
-    **kwargs
+    w_center, rho, contours, parity, tail_idcs, u=0.0, nlenses=2, npts=201, **kwargs
 ):
     # Make sure that npts is odd
     #    npts = jnp.where(npts % 2 == 0, npts + 1, npts)
@@ -800,35 +789,22 @@ def _integrate_ld(
         """Integrate from x0 to xl for each yl."""
         # Construct grid in z2 and evaluate the brightness profile at each point
         y = jnp.linspace(y0 * jnp.ones_like(xl), yl, npts)
+
         integrands = _brightness_profile(
             xl + 1j * y, rho, w_center, u=u, nlenses=nlenses, **kwargs
         )
-        if integration_rule == "simpson":
-            I = simpson_quadrature(y, integrands)
-        elif integration_rule == "trapezoidal":
-            I = jnp.trapz(integrands, x=y, axis=0)
-        else:
-            raise ValueError(
-                "`integration_rule` has to be either `simpson` or `trapezoidal`"
-            )
+        I = simpson_quadrature(y, integrands)
         return -0.5 * I
 
     def Q(x0, y0, xl, yl):
         """Integrate from y0 to yl for each xl."""
         # Construct grid in z1 and evaluate the brightness profile at each point
         x = jnp.linspace(x0 * jnp.ones_like(xl), xl, npts)
+
         integrands = _brightness_profile(
             x + 1j * yl, rho, w_center, u=u, nlenses=nlenses, **kwargs
         )
-
-        if integration_rule == "simpson":
-            I = simpson_quadrature(x, integrands)
-        elif integration_rule == "trapezoidal":
-            I = jnp.trapz(integrands, x=x, axis=0)
-        else:
-            raise ValueError(
-                "`integration_rule` has to be either `simpson` or `trapezoidal`"
-            )
+        I = simpson_quadrature(x, integrands)
         return 0.5 * I
 
     # We choose the centroid of each contour to be lower limit for the P and Q
@@ -912,7 +888,6 @@ def _integrate_unif(
         "npts_limb",
         "niter_limb",
         "npts_ld",
-        "integration_rule",
     ),
 )
 def mag_extended_source_binary(
@@ -921,10 +896,9 @@ def mag_extended_source_binary(
     e1,
     rho,
     u=0.0,
-    npts_limb=250,
-    niter_limb=10,
-    npts_ld=301,
-    integration_rule="trapezoidal",
+    npts_limb=300,
+    niter_limb=8,
+    npts_ld=601,
 ):
     """
     Compute the magnification for an extended source lensed by a binary lens
@@ -946,19 +920,16 @@ def mag_extended_source_binary(
             fashion. This parameters determines the precision of the magnification
             calculation (absent limb-darkening, in which case `npts_ld` is also
             important). The default value should keep the relative error well
-            below 10^{-3} in all cases. Defaults to 250.
+            below 10^{-3} in all cases. Defaults to 300.
         niter_limb (int, optional): Number of iterations to use for the point
             source magnification evaluation on the source limb. At each
             iteration we geometrically decrease the number of points starting
             with `npts_limb` and ending with 2 for the final iteration. The new
             points are placed where the gradient of the magnification is
-            largest. Deaults to 10.
+            largest. Deaults to 8.
         npts_ld (int, optional): Number of points at which the stellar
             brightness function is evaluated when computing the integrals P and
-            Q defined in Dominik 1998. Defaults to 100.
-        integration_rule (str, optional): Integration rule to use when computing
-            the P and Q integrals. Can be either "simpson" or "trapezoidal".
-            Defaults to "trapezoidal".
+            Q defined in Dominik 1998. Defaults to 601.
 
     Returns:
         float: Total magnification factor.
@@ -997,7 +968,6 @@ def mag_extended_source_binary(
             u=u,
             nlenses=2,
             npts=npts_ld,
-            integration_rule=integration_rule,
             a=a,
             e1=e1,
         ),
@@ -1012,7 +982,6 @@ def mag_extended_source_binary(
         "npts_limb",
         "niter_limb",
         "npts_ld",
-        "integration_rule",
     ),
 )
 def mag_extended_source_triple(
@@ -1023,10 +992,9 @@ def mag_extended_source_triple(
     e2,
     rho,
     u=0.0,
-    npts_limb=250,
-    niter_limb=10,
-    npts_ld=301,
-    integration_rule="trapezoidal",
+    npts_limb=300,
+    niter_limb=8,
+    npts_ld=601,
 ):
     """
     Compute the magnification for an extended source lensed by a triple lens
@@ -1058,9 +1026,6 @@ def mag_extended_source_triple(
         npts_ld (int, optional): Number of points at which the stellar
             brightness function is evaluated when computing the integrals P and
             Q defined in Dominik 1998. Defaults to 100.
-        integration_rule (str, optional): Integration rule to use when computing
-            the P and Q integrals. Can be either "simpson" or "trapezoidal".
-            Defaults to "trapezoidal".
 
     Returns:
         float: Total magnification factor.
@@ -1101,7 +1066,6 @@ def mag_extended_source_triple(
             u=u,
             nlenses=3,
             npts=npts_ld,
-            integration_rule=integration_rule,
             a=a,
             e1=e1,
         ),
