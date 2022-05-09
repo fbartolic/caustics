@@ -56,9 +56,6 @@ class CMakeBuildExt(build_ext):
             "-DCMAKE_BUILD_TYPE={}".format("Debug" if self.debug else "Release"),
             "-DCMAKE_PREFIX_PATH={}".format(pybind11.get_cmake_dir()),
         ]
-        if os.environ.get("arm64", "no").lower() == "yes":
-            cmake_args.append("-DCMAKE_OSX_ARCHITECTURES=arm64")
-
         if os.environ.get("CAUSTICS_CUDA", "no").lower() == "yes":
             cmake_args.append("-DCAUSTICS_CUDA=yes")
             cmake_args.append("-DCUDA_COMPILER=/usr/local/cuda-11.2/bin/nvcc")
@@ -105,7 +102,7 @@ setup(
     name="caustics",
     author="Fran Bartolich",
     author_email="fb90@st-andrews.ac.uk",
-    url="https://github.com/fbartolic/extending-jax",
+    url="https://github.com/fbartolic/caustics",
     license="MIT",
     description=("Differentiable microlensing with JAX."),
     long_description=read("README.md"),
