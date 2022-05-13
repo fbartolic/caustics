@@ -11,7 +11,7 @@ from functools import partial
 
 import numpy as np
 import jax.numpy as jnp
-from jax import jit, vmap, lax
+from jax import jit, vmap, lax, random
 
 from . import (
     images_point_source_binary,
@@ -29,7 +29,7 @@ from .point_source_magnification import (
 
 @partial(jit, static_argnames=("nlenses", "npts_init", "niter", "compensated"))
 def _images_of_source_limb(
-    w_center, rho, nlenses=2, npts_init=500, niter=6, compensated=False, **kwargs
+    w_center, rho, nlenses=2, npts_init=300, niter=8, compensated=False, **kwargs
 ):
     if nlenses == 2:
         get_images = lambda w: images_point_source_binary(
@@ -60,17 +60,26 @@ def _images_of_source_limb(
     # Refine sampling by placing geometrically fewer points each iteration
     # in the regions where the magnification gradient is largest
     npts_list = np.geomspace(2, npts_init, niter, endpoint=False, dtype=int)[::-1]
+    key = random.PRNGKey(42)
 
     for _npts in npts_list:
         # Resample theta
-        delta_mag = jnp.concatenate([jnp.diff(mag), jnp.zeros(1)])
+        delta_mag = jnp.gradient(mag)
         idcs_maxdelta = jnp.argsort(jnp.abs(delta_mag))[::-1][:_npts]
 
-        #        theta_patch = jnp.linspace(
-        #            theta[idcs_maxdelta], theta[idcs_maxdelta + 1], 5
-        #        )[1:-1, :].reshape(-1)
-
         theta_patch = 0.5 * (theta[idcs_maxdelta] + theta[idcs_maxdelta + 1])
+
+        # Make sure that there are no exact duplicate values in `theta_patch`
+        # and no common values with `theta`
+        mask_duplicate = jnp.ones(len(theta_patch), dtype=bool)
+        mask_duplicate = mask_duplicate.at[
+            jnp.unique(theta_patch, return_index=True, size=len(theta_patch))[1]
+        ].set(False)
+        mask_common = jnp.isin(theta_patch, theta, assume_unique=True)
+        mask = jnp.logical_or(mask_duplicate, mask_common)
+        theta_patch += mask * random.uniform(
+            key, theta_patch.shape, maxval=1e-05
+        )  # small perturbation
 
         images_patch, mask_images_patch = get_images(
             rho * jnp.exp(1j * theta_patch) + w_center
@@ -105,23 +114,20 @@ def _linear_sum_assignment(a, b):
         array_like: Indices which specify the desired permutation of b.
     """
     # This is the first guess for a solution but sometimes we get duplicate
-    # indices so for those values we need to choose the 2nd or 3rd best
-    # solution. This approach can fail if there are too many elements in b which
-    # map tothe same element of a but it's good enough for our purposes. For a
-    # general solution see the Hungarian algorithm/optimal transport algorithms.
+    # indices so for those values we need to choose the next best best
+    # solution. For an alternative solution to this problem see the Hungarian
+    # algorithm and optimal transport algorithms.
     idcs_initial = jnp.argsort(jnp.abs(b - a[:, None]), axis=1)
     idcs_final = jnp.repeat(999, len(a))
 
     def f(carry, idcs_initial_row):
         i, idcs_final = carry
-        cond1 = jnp.isin(idcs_initial_row[0], jnp.array(idcs_final))
-        cond2 = jnp.isin(idcs_initial_row[1], jnp.array(idcs_final))
 
-        idx_closest = jnp.where(
-            cond1,
-            jnp.where(cond2, idcs_initial_row[2], idcs_initial_row[1]),
-            idcs_initial_row[0],
-        )
+        conds = ~jnp.isin(idcs_initial_row, idcs_final)
+        branches = [lambda j=j: idcs_initial_row[j] for j in range(len(a))]
+
+        idx_closest = lax.switch(first_nonzero(conds), branches,)
+
         idcs_final = idcs_final.at[i].set(idx_closest)
         return (i + 1, idcs_final), idx_closest
 
@@ -237,7 +243,7 @@ def _get_segments(images, images_mask, images_parity, nlenses=2):
         The "head" of each segment starts at index 0 and the "tail" index is
         variable depending on the segment.
     """
-    n_images = nlenses**2 + 1
+    n_images = nlenses ** 2 + 1
     nr_of_segments = 2 * n_images
 
     # Untangle the images
@@ -457,12 +463,7 @@ def _merge_two_segments(seg1, seg2, tidx1, tidx2, ctype, max_dist=1e-01):
         )
 
     seg_merged, tidx_merged, success = lax.switch(
-        ctype,
-        [case1, case2, case3, case4],
-        seg1,
-        seg2,
-        tidx1,
-        tidx2,
+        ctype, [case1, case2, case3, case4], seg1, seg2, tidx1, tidx2,
     )
 
     return success, seg_merged, tidx_merged
@@ -657,12 +658,7 @@ def _merge_open_segments(
             )
         )
 
-        return (
-            seg_current_new,
-            tidx_current_new,
-            open_segments,
-            tidcs,
-        ), 0.0
+        return (seg_current_new, tidx_current_new, open_segments, tidcs,), 0.0
 
     init = (open_segments[0], tail_idcs[0], open_segments[1:], tail_idcs[1:])
     carry, _ = lax.scan(body_fn, init, idcs)
@@ -770,8 +766,8 @@ def _brightness_profile(z, rho, w_center, u=0.1, nlenses=2, **kwargs):
     # See Dominik 1998 for details
     B_r = jnp.where(
         r <= 1.0,
-        1 + safe_for_grad_sqrt(1 - r**2),
-        1 - safe_for_grad_sqrt(1 - 1.0 / r**2),
+        1 + safe_for_grad_sqrt(1 - r ** 2),
+        1 - safe_for_grad_sqrt(1 - 1.0 / r ** 2),
     )
 
     I = 3.0 / (3.0 - u) * (u * B_r + 1.0 - 2.0 * u)
@@ -838,7 +834,7 @@ def _integrate_ld(
     I1 = Pmid * delta_x
     I2 = Qmid * delta_y
 
-    mag = jnp.sum(I1 + I2, axis=1) / (np.pi * rho**2)
+    mag = jnp.sum(I1 + I2, axis=1) / (np.pi * rho ** 2)
 
     # sum magnifications for each image, taking into account the parity of each
     # image
@@ -847,10 +843,7 @@ def _integrate_ld(
 
 @jit
 def _integrate_unif(
-    rho,
-    contours,
-    parity,
-    tail_idcs,
+    rho, contours, parity, tail_idcs,
 ):
     # Select k and (k + 1)th elements
     contours_k = contours
@@ -875,7 +868,7 @@ def _integrate_unif(
     I1 = 0.5 * x_mid * delta_y
     I2 = -0.5 * y_mid * delta_x
 
-    mag = jnp.sum(I1 + I2, axis=1) / (np.pi * rho**2)
+    mag = jnp.sum(I1 + I2, axis=1) / (np.pi * rho ** 2)
 
     # sum magnifications for each image, taking into account the parity of each
     # image
@@ -883,22 +876,10 @@ def _integrate_unif(
 
 
 @partial(
-    jit,
-    static_argnames=(
-        "npts_limb",
-        "niter_limb",
-        "npts_ld",
-    ),
+    jit, static_argnames=("npts_limb", "niter_limb", "npts_ld",),
 )
 def mag_extended_source_binary(
-    w,
-    a,
-    e1,
-    rho,
-    u=0.0,
-    npts_limb=300,
-    niter_limb=8,
-    npts_ld=601,
+    w, a, e1, rho, u=0.0, npts_limb=300, niter_limb=8, npts_ld=601,
 ):
     """
     Compute the magnification for an extended source lensed by a binary lens
@@ -935,30 +916,16 @@ def mag_extended_source_binary(
         float: Total magnification factor.
     """
     images, images_mask, images_parity = _images_of_source_limb(
-        w,
-        rho,
-        nlenses=2,
-        a=a,
-        e1=e1,
-        npts_init=npts_limb,
-        niter=niter_limb,
+        w, rho, nlenses=2, a=a, e1=e1, npts_init=npts_limb, niter=niter_limb,
     )
     segments, cond_closed = _get_segments(images, images_mask, images_parity, nlenses=2)
     contours, parity, tail_idcs = _get_contours(
-        segments,
-        cond_closed,
-        n_contours=5,
-        max_nr_of_segments_in_contour=10,
+        segments, cond_closed, n_contours=5, max_nr_of_segments_in_contour=10,
     )
 
     mag = lax.cond(
         u == 0.0,
-        lambda: _integrate_unif(
-            rho,
-            contours,
-            parity,
-            tail_idcs,
-        ),
+        lambda: _integrate_unif(rho, contours, parity, tail_idcs,),
         lambda: _integrate_ld(
             w,
             rho,
@@ -977,24 +944,10 @@ def mag_extended_source_binary(
 
 
 @partial(
-    jit,
-    static_argnames=(
-        "npts_limb",
-        "niter_limb",
-        "npts_ld",
-    ),
+    jit, static_argnames=("npts_limb", "niter_limb", "npts_ld",),
 )
 def mag_extended_source_triple(
-    w,
-    a,
-    r3,
-    e1,
-    e2,
-    rho,
-    u=0.0,
-    npts_limb=300,
-    niter_limb=8,
-    npts_ld=601,
+    w, a, r3, e1, e2, rho, u=0.0, npts_limb=300, niter_limb=8, npts_ld=601,
 ):
     """
     Compute the magnification for an extended source lensed by a triple lens
@@ -1043,20 +996,12 @@ def mag_extended_source_triple(
     )
     segments, cond_closed = _get_segments(images, images_mask, images_parity, nlenses=3)
     contours, parity, tail_idcs = _get_contours(
-        segments,
-        cond_closed,
-        n_contours=5,
-        max_nr_of_segments_in_contour=15,
+        segments, cond_closed, n_contours=5, max_nr_of_segments_in_contour=15,
     )
 
     mag = lax.cond(
         u == 0.0,
-        lambda: _integrate_unif(
-            rho,
-            contours,
-            parity,
-            tail_idcs,
-        ),
+        lambda: _integrate_unif(rho, contours, parity, tail_idcs,),
         lambda: _integrate_ld(
             w,
             rho,
