@@ -163,9 +163,7 @@ def mag_binary(
     """
     z, mask_z = images_point_source_binary(w_points, a, e1)
 
-    mask_test, mu_approx = _extended_source_test(
-        z, mask_z, w_points, rho, a, e1, **{"a": a, "e1": e1}
-    )
+    mask_test, mu_approx = _extended_source_test(z, mask_z, w_points, rho, a=a, e1=e1)
 
     # Iterate over w_points and execute either the hexadecapole  approximation
     # or the full extended source calculation. `vmap` cannot be used here because
@@ -237,7 +235,7 @@ def mag_triple(
     z, mask_z = images_point_source_triple(w_points, a, e1, e2, r3)
 
     mask_test, mu_approx = _extended_source_test(
-        z, mask_z, w_points, rho, a, e1, **{"a": a, "e1": e1, "r3": r3, "e2": e2}
+        z, mask_z, w_points, rho, a=a, e1=e1, e2=e2, r3=r3
     )
 
     # Iterate over w_points and execute either the hexadecapole  approximation
