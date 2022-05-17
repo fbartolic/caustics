@@ -7,10 +7,12 @@ __all__ = [
     "images_point_source_triple",
     "mag_point_source_binary",
     "mag_point_source_triple",
-    "mag_extended_source_binary",
-    "mag_extended_source_triple",
     "critical_and_caustic_curves_binary",
     "critical_and_caustic_curves_triple",
+    "mag_extended_source_binary",
+    "mag_extended_source_triple",
+    "mag_binary",
+    "mag_triple",
 ]
 
 from .point_source_magnification import (
@@ -27,4 +29,9 @@ from .point_source_magnification import (
 from .extended_source_magnification import (
     mag_extended_source_binary,
     mag_extended_source_triple,
+)
+
+from .lightcurve import (
+    mag_binary,
+    mag_triple,
 )
