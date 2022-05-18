@@ -29,7 +29,7 @@ from .point_source_magnification import (
 
 @partial(jit, static_argnames=("nlenses", "npts_init", "niter", "compensated"))
 def _images_of_source_limb(
-    w_center, rho, nlenses=2, npts_init=300, niter=8, compensated=False, **kwargs
+    w_center, rho, nlenses=2, npts_init=500, niter=2, compensated=False, **kwargs
 ):
     if nlenses == 2:
         get_images = lambda w: images_point_source_binary(
@@ -106,6 +106,9 @@ def _linear_sum_assignment(a, b):
     Given 1D arrays a and b, return the indices which specify the permutation of
     b for which the element-wise distance between the two arrays is minimized.
 
+    For an alternative solution to this problem see the Hungarian algorithm 
+    and similar problems in optimal transport.
+
     Args:
         a (array_like): 1D array.
         b (array_like): 1D array.
@@ -115,12 +118,12 @@ def _linear_sum_assignment(a, b):
     """
     # This is the first guess for a solution but sometimes we get duplicate
     # indices so for those values we need to choose the next best best
-    # solution. For an alternative solution to this problem see the Hungarian
-    # algorithm and optimal transport algorithms.
+    # solution.
     idcs_initial = jnp.argsort(jnp.abs(b - a[:, None]), axis=1)
     idcs_final = jnp.repeat(999, len(a))
 
-    def f(carry, idcs_initial_row):
+    # Make sure that each index is assigned to at most one value
+    def body_fn(carry, idcs_initial_row):
         i, idcs_final = carry
 
         conds = ~jnp.isin(idcs_initial_row, idcs_final)
@@ -131,7 +134,7 @@ def _linear_sum_assignment(a, b):
         idcs_final = idcs_final.at[i].set(idx_closest)
         return (i + 1, idcs_final), idx_closest
 
-    _, res = lax.scan(f, (0, idcs_final), idcs_initial)
+    _, res = lax.scan(body_fn, (0, idcs_final), idcs_initial)
 
     return res
 
@@ -179,14 +182,15 @@ def _split_single_segment(segment, n_parts=5):
 
     # Split into n_parts parts
     n = jnp.arange(npts)
-    masks = []
-    for i in range(n_parts):
-        l, r = left_edges[i], right_edges[i]
-        masks.append(
-            jnp.where((l == 0.0) & (r == 0.0), jnp.zeros(npts), (n >= l) & (n <= r))
-        )
 
-    segments_split = jnp.stack(jnp.array([segment * mask for mask in masks]))
+    def body_fn(carry, xs):
+        l, r = xs
+        mask = jnp.where((l == 0.0) & (r == 0.0), jnp.zeros(npts), (n >= l) & (n <= r))
+        return 0, mask
+
+    _, masks = lax.scan(body_fn, 0, (left_edges, right_edges))
+
+    segments_split = vmap(lambda mask: segment * mask)(masks)
 
     return segments_split
 
@@ -552,7 +556,7 @@ def _merge_open_segments(
     open_segments, tail_idcs = open_segments[_idcs], tail_idcs[_idcs]
 
     # Merge all open segments: start by selecting 0th open segment and then
-    # sequantially merge it with other ones until a closed segment is formed
+    # sequentially merge it with other ones until a closed segment is formed
     idcs = jnp.arange(0, max_nr_of_segments_in_contour)
 
     def body_fn(carry, idx_dummy):
