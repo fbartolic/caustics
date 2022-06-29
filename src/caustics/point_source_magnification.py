@@ -1,13 +1,9 @@
 # -*- coding: utf-8 -*-
 __all__ = [
-    "images_point_source_binary",
-    "images_point_source_triple",
-    "mag_point_source_binary",
-    "mag_point_source_triple",
-    "critical_and_caustic_curves_binary",
-    "critical_and_caustic_curves_triple",
-    "lens_eq_binary",
-    "lens_eq_triple",
+    "images_point_source",
+    "mag_point_source",
+    "critical_and_caustic_curves",
+    "lens_eq",
 ]
 
 from functools import partial
@@ -40,20 +36,20 @@ def _poly_coeffs_binary(w, a, e1):
     """
     wbar = jnp.conjugate(w)
 
-    p_0 = -(a ** 2) + wbar ** 2
-    p_1 = a ** 2 * w - 2 * a * e1 + a - w * wbar ** 2 + wbar
+    p_0 = -(a**2) + wbar**2
+    p_1 = a**2 * w - 2 * a * e1 + a - w * wbar**2 + wbar
     p_2 = (
-        2 * a ** 4
-        - 2 * a ** 2 * wbar ** 2
+        2 * a**4
+        - 2 * a**2 * wbar**2
         + 4 * a * wbar * e1
         - 2 * a * wbar
         - 2 * w * wbar
     )
     p_3 = (
-        -2 * a ** 4 * w
-        + 4 * a ** 3 * e1
-        - 2 * a ** 3
-        + 2 * a ** 2 * w * wbar ** 2
+        -2 * a**4 * w
+        + 4 * a**3 * e1
+        - 2 * a**3
+        + 2 * a**2 * w * wbar**2
         - 4 * a * w * wbar * e1
         + 2 * a * w * wbar
         + 2 * a * e1
@@ -61,30 +57,30 @@ def _poly_coeffs_binary(w, a, e1):
         - w
     )
     p_4 = (
-        -(a ** 6)
-        + a ** 4 * wbar ** 2
-        - 4 * a ** 3 * wbar * e1
-        + 2 * a ** 3 * wbar
-        + 2 * a ** 2 * w * wbar
-        + 4 * a ** 2 * e1 ** 2
-        - 4 * a ** 2 * e1
-        + 2 * a ** 2
+        -(a**6)
+        + a**4 * wbar**2
+        - 4 * a**3 * wbar * e1
+        + 2 * a**3 * wbar
+        + 2 * a**2 * w * wbar
+        + 4 * a**2 * e1**2
+        - 4 * a**2 * e1
+        + 2 * a**2
         - 4 * a * w * e1
         + 2 * a * w
     )
     p_5 = (
-        a ** 6 * w
-        - 2 * a ** 5 * e1
-        + a ** 5
-        - a ** 4 * w * wbar ** 2
-        - a ** 4 * wbar
-        + 4 * a ** 3 * w * wbar * e1
-        - 2 * a ** 3 * w * wbar
-        + 2 * a ** 3 * e1
-        - a ** 3
-        - 4 * a ** 2 * w * e1 ** 2
-        + 4 * a ** 2 * w * e1
-        - a ** 2 * w
+        a**6 * w
+        - 2 * a**5 * e1
+        + a**5
+        - a**4 * w * wbar**2
+        - a**4 * wbar
+        + 4 * a**3 * w * wbar * e1
+        - 2 * a**3 * w * wbar
+        + 2 * a**3 * e1
+        - a**3
+        - 4 * a**2 * w * e1**2
+        + 4 * a**2 * w * e1
+        - a**2 * w
     )
 
     p = jnp.stack([p_0, p_1, p_2, p_3, p_4, p_5])
@@ -114,46 +110,46 @@ def _poly_coeffs_triple(w, a, r3, e1, e2):
     wbar = jnp.conjugate(w)
     r3bar = jnp.conjugate(r3)
 
-    p_0 = -(a ** 2) * wbar + a ** 2 * r3bar + wbar ** 3 - wbar ** 2 * r3bar
+    p_0 = -(a**2) * wbar + a**2 * r3bar + wbar**3 - wbar**2 * r3bar
 
     p_1 = (
-        a ** 2 * w * wbar
-        - a ** 2 * w * r3bar
-        + 3 * a ** 2 * wbar * r3
-        - 3 * a ** 2 * r3bar * r3
-        - a ** 2 * e1
-        - a ** 2 * e2
+        a**2 * w * wbar
+        - a**2 * w * r3bar
+        + 3 * a**2 * wbar * r3
+        - 3 * a**2 * r3bar * r3
+        - a**2 * e1
+        - a**2 * e2
         - a * wbar * e1
         + a * wbar * e2
         + a * r3bar * e1
         - a * r3bar * e2
-        - w * wbar ** 3
-        + w * wbar ** 2 * r3bar
-        - 3 * wbar ** 3 * r3
-        + 3 * wbar ** 2 * r3bar * r3
-        + 2 * wbar ** 2
+        - w * wbar**3
+        + w * wbar**2 * r3bar
+        - 3 * wbar**3 * r3
+        + 3 * wbar**2 * r3bar * r3
+        + 2 * wbar**2
         + wbar * r3bar * e1
         + wbar * r3bar * e2
         - 2 * wbar * r3bar
     )
 
     p_2 = (
-        3 * a ** 4 * wbar
-        - 3 * a ** 4 * r3bar
-        - a ** 3 * e1
-        + a ** 3 * e2
-        - 3 * a ** 2 * w * wbar * r3
-        + 3 * a ** 2 * w * r3bar * r3
-        + a ** 2 * w
-        - 3 * a ** 2 * wbar ** 3
-        + 3 * a ** 2 * wbar ** 2 * r3bar
-        - 3 * a ** 2 * wbar * r3 ** 2
-        + 3 * a ** 2 * r3bar * r3 ** 2
-        + 4 * a ** 2 * e1 * r3
-        + 4 * a ** 2 * e2 * r3
-        - a ** 2 * r3
-        + 3 * a * wbar ** 2 * e1
-        - 3 * a * wbar ** 2 * e2
+        3 * a**4 * wbar
+        - 3 * a**4 * r3bar
+        - a**3 * e1
+        + a**3 * e2
+        - 3 * a**2 * w * wbar * r3
+        + 3 * a**2 * w * r3bar * r3
+        + a**2 * w
+        - 3 * a**2 * wbar**3
+        + 3 * a**2 * wbar**2 * r3bar
+        - 3 * a**2 * wbar * r3**2
+        + 3 * a**2 * r3bar * r3**2
+        + 4 * a**2 * e1 * r3
+        + 4 * a**2 * e2 * r3
+        - a**2 * r3
+        + 3 * a * wbar**2 * e1
+        - 3 * a * wbar**2 * e2
         - 2 * a * wbar * r3bar * e1
         + 2 * a * wbar * r3bar * e2
         + 3 * a * wbar * e1 * r3
@@ -162,15 +158,15 @@ def _poly_coeffs_triple(w, a, r3, e1, e2):
         + 3 * a * r3bar * e2 * r3
         - a * e1
         + a * e2
-        + 3 * w * wbar ** 3 * r3
-        - 3 * w * wbar ** 2 * r3bar * r3
-        - 3 * w * wbar ** 2
+        + 3 * w * wbar**3 * r3
+        - 3 * w * wbar**2 * r3bar * r3
+        - 3 * w * wbar**2
         + 2 * w * wbar * r3bar
-        + 3 * wbar ** 3 * r3 ** 2
-        - 3 * wbar ** 2 * r3bar * r3 ** 2
-        - 3 * wbar ** 2 * e1 * r3
-        - 3 * wbar ** 2 * e2 * r3
-        - 3 * wbar ** 2 * r3
+        + 3 * wbar**3 * r3**2
+        - 3 * wbar**2 * r3bar * r3**2
+        - 3 * wbar**2 * e1 * r3
+        - 3 * wbar**2 * e2 * r3
+        - 3 * wbar**2 * r3
         - wbar * r3bar * e1 * r3
         - wbar * r3bar * e2 * r3
         + 4 * wbar * r3bar * r3
@@ -181,197 +177,197 @@ def _poly_coeffs_triple(w, a, r3, e1, e2):
     )
 
     p_3 = (
-        -3 * a ** 4 * w * wbar
-        + 3 * a ** 4 * w * r3bar
-        - 9 * a ** 4 * wbar * r3
-        + 9 * a ** 4 * r3bar * r3
-        + 2 * a ** 4 * e1
-        + 2 * a ** 4 * e2
-        + a ** 3 * w * e1
-        - a ** 3 * w * e2
-        + 3 * a ** 3 * wbar * e1
-        - 3 * a ** 3 * wbar * e2
-        - 3 * a ** 3 * r3bar * e1
-        + 3 * a ** 3 * r3bar * e2
-        + 3 * a ** 3 * e1 * r3
-        - 3 * a ** 3 * e2 * r3
-        + 3 * a ** 2 * w * wbar ** 3
-        - 3 * a ** 2 * w * wbar ** 2 * r3bar
-        + 3 * a ** 2 * w * wbar * r3 ** 2
-        - 3 * a ** 2 * w * r3bar * r3 ** 2
-        - a ** 2 * w * e1 * r3
-        - a ** 2 * w * e2 * r3
-        - 2 * a ** 2 * w * r3
-        + 9 * a ** 2 * wbar ** 3 * r3
-        - 9 * a ** 2 * wbar ** 2 * r3bar * r3
-        + 3 * a ** 2 * wbar ** 2 * e1
-        + 3 * a ** 2 * wbar ** 2 * e2
-        - 6 * a ** 2 * wbar ** 2
-        - 5 * a ** 2 * wbar * r3bar * e1
-        - 5 * a ** 2 * wbar * r3bar * e2
-        + 6 * a ** 2 * wbar * r3bar
-        + a ** 2 * wbar * r3 ** 3
-        - a ** 2 * r3bar * r3 ** 3
-        - a ** 2 * e1 ** 2
-        + 2 * a ** 2 * e1 * e2
-        - 5 * a ** 2 * e1 * r3 ** 2
-        - a ** 2 * e2 ** 2
-        - 5 * a ** 2 * e2 * r3 ** 2
-        + 2 * a ** 2 * r3 ** 2
-        - 3 * a * w * wbar ** 2 * e1
-        + 3 * a * w * wbar ** 2 * e2
+        -3 * a**4 * w * wbar
+        + 3 * a**4 * w * r3bar
+        - 9 * a**4 * wbar * r3
+        + 9 * a**4 * r3bar * r3
+        + 2 * a**4 * e1
+        + 2 * a**4 * e2
+        + a**3 * w * e1
+        - a**3 * w * e2
+        + 3 * a**3 * wbar * e1
+        - 3 * a**3 * wbar * e2
+        - 3 * a**3 * r3bar * e1
+        + 3 * a**3 * r3bar * e2
+        + 3 * a**3 * e1 * r3
+        - 3 * a**3 * e2 * r3
+        + 3 * a**2 * w * wbar**3
+        - 3 * a**2 * w * wbar**2 * r3bar
+        + 3 * a**2 * w * wbar * r3**2
+        - 3 * a**2 * w * r3bar * r3**2
+        - a**2 * w * e1 * r3
+        - a**2 * w * e2 * r3
+        - 2 * a**2 * w * r3
+        + 9 * a**2 * wbar**3 * r3
+        - 9 * a**2 * wbar**2 * r3bar * r3
+        + 3 * a**2 * wbar**2 * e1
+        + 3 * a**2 * wbar**2 * e2
+        - 6 * a**2 * wbar**2
+        - 5 * a**2 * wbar * r3bar * e1
+        - 5 * a**2 * wbar * r3bar * e2
+        + 6 * a**2 * wbar * r3bar
+        + a**2 * wbar * r3**3
+        - a**2 * r3bar * r3**3
+        - a**2 * e1**2
+        + 2 * a**2 * e1 * e2
+        - 5 * a**2 * e1 * r3**2
+        - a**2 * e2**2
+        - 5 * a**2 * e2 * r3**2
+        + 2 * a**2 * r3**2
+        - 3 * a * w * wbar**2 * e1
+        + 3 * a * w * wbar**2 * e2
         + 2 * a * w * wbar * r3bar * e1
         - 2 * a * w * wbar * r3bar * e2
-        - 9 * a * wbar ** 2 * e1 * r3
-        + 9 * a * wbar ** 2 * e2 * r3
+        - 9 * a * wbar**2 * e1 * r3
+        + 9 * a * wbar**2 * e2 * r3
         + 6 * a * wbar * r3bar * e1 * r3
         - 6 * a * wbar * r3bar * e2 * r3
-        - 3 * a * wbar * e1 * r3 ** 2
+        - 3 * a * wbar * e1 * r3**2
         + 4 * a * wbar * e1
-        + 3 * a * wbar * e2 * r3 ** 2
+        + 3 * a * wbar * e2 * r3**2
         - 4 * a * wbar * e2
-        + a * r3bar * e1 ** 2
-        + 3 * a * r3bar * e1 * r3 ** 2
+        + a * r3bar * e1**2
+        + 3 * a * r3bar * e1 * r3**2
         - 2 * a * r3bar * e1
-        - a * r3bar * e2 ** 2
-        - 3 * a * r3bar * e2 * r3 ** 2
+        - a * r3bar * e2**2
+        - 3 * a * r3bar * e2 * r3**2
         + 2 * a * r3bar * e2
-        + a * e1 ** 2 * r3
+        + a * e1**2 * r3
         + 2 * a * e1 * r3
-        - a * e2 ** 2 * r3
+        - a * e2**2 * r3
         - 2 * a * e2 * r3
-        - 3 * w * wbar ** 3 * r3 ** 2
-        + 3 * w * wbar ** 2 * r3bar * r3 ** 2
-        + 3 * w * wbar ** 2 * e1 * r3
-        + 3 * w * wbar ** 2 * e2 * r3
-        + 6 * w * wbar ** 2 * r3
+        - 3 * w * wbar**3 * r3**2
+        + 3 * w * wbar**2 * r3bar * r3**2
+        + 3 * w * wbar**2 * e1 * r3
+        + 3 * w * wbar**2 * e2 * r3
+        + 6 * w * wbar**2 * r3
         - 2 * w * wbar * r3bar * e1 * r3
         - 2 * w * wbar * r3bar * e2 * r3
         - 4 * w * wbar * r3bar * r3
         - 3 * w * wbar
         + w * r3bar
-        - wbar ** 3 * r3 ** 3
-        + wbar ** 2 * r3bar * r3 ** 3
-        + 6 * wbar ** 2 * e1 * r3 ** 2
-        + 6 * wbar ** 2 * e2 * r3 ** 2
-        - wbar * r3bar * e1 * r3 ** 2
-        - wbar * r3bar * e2 * r3 ** 2
-        - 2 * wbar * r3bar * r3 ** 2
+        - wbar**3 * r3**3
+        + wbar**2 * r3bar * r3**3
+        + 6 * wbar**2 * e1 * r3**2
+        + 6 * wbar**2 * e2 * r3**2
+        - wbar * r3bar * e1 * r3**2
+        - wbar * r3bar * e2 * r3**2
+        - 2 * wbar * r3bar * r3**2
         - 4 * wbar * e1 * r3
         - 4 * wbar * e2 * r3
         + wbar * r3
-        - r3bar * e1 ** 2 * r3
+        - r3bar * e1**2 * r3
         - 2 * r3bar * e1 * e2 * r3
-        - r3bar * e2 ** 2 * r3
+        - r3bar * e2**2 * r3
         + r3bar * r3
     )
 
     p_4 = (
-        -3 * a ** 6 * wbar
-        + 3 * a ** 6 * r3bar
-        + 2 * a ** 5 * e1
-        - 2 * a ** 5 * e2
-        + 9 * a ** 4 * w * wbar * r3
-        - 9 * a ** 4 * w * r3bar * r3
-        + a ** 4 * w * e1
-        + a ** 4 * w * e2
-        - 3 * a ** 4 * w
-        + 3 * a ** 4 * wbar ** 3
-        - 3 * a ** 4 * wbar ** 2 * r3bar
-        + 9 * a ** 4 * wbar * r3 ** 2
-        - 9 * a ** 4 * r3bar * r3 ** 2
-        - 9 * a ** 4 * e1 * r3
-        - 9 * a ** 4 * e2 * r3
-        + 3 * a ** 4 * r3
-        - 3 * a ** 3 * w * e1 * r3
-        + 3 * a ** 3 * w * e2 * r3
-        - 6 * a ** 3 * wbar ** 2 * e1
-        + 6 * a ** 3 * wbar ** 2 * e2
-        + 4 * a ** 3 * wbar * r3bar * e1
-        - 4 * a ** 3 * wbar * r3bar * e2
-        - 9 * a ** 3 * wbar * e1 * r3
-        + 9 * a ** 3 * wbar * e2 * r3
-        + 9 * a ** 3 * r3bar * e1 * r3
-        - 9 * a ** 3 * r3bar * e2 * r3
-        - a ** 3 * e1 ** 2
-        - 3 * a ** 3 * e1 * r3 ** 2
-        + 3 * a ** 3 * e1
-        + a ** 3 * e2 ** 2
-        + 3 * a ** 3 * e2 * r3 ** 2
-        - 3 * a ** 3 * e2
-        - 9 * a ** 2 * w * wbar ** 3 * r3
-        + 9 * a ** 2 * w * wbar ** 2 * r3bar * r3
-        - 3 * a ** 2 * w * wbar ** 2 * e1
-        - 3 * a ** 2 * w * wbar ** 2 * e2
-        + 9 * a ** 2 * w * wbar ** 2
-        + 2 * a ** 2 * w * wbar * r3bar * e1
-        + 2 * a ** 2 * w * wbar * r3bar * e2
-        - 6 * a ** 2 * w * wbar * r3bar
-        - a ** 2 * w * wbar * r3 ** 3
-        + a ** 2 * w * r3bar * r3 ** 3
-        + 2 * a ** 2 * w * e1 * r3 ** 2
-        + 2 * a ** 2 * w * e2 * r3 ** 2
-        + a ** 2 * w * r3 ** 2
-        - 9 * a ** 2 * wbar ** 3 * r3 ** 2
-        + 9 * a ** 2 * wbar ** 2 * r3bar * r3 ** 2
-        + 9 * a ** 2 * wbar ** 2 * r3
-        + 9 * a ** 2 * wbar * r3bar * e1 * r3
-        + 9 * a ** 2 * wbar * r3bar * e2 * r3
-        - 12 * a ** 2 * wbar * r3bar * r3
-        + 3 * a ** 2 * wbar * e1 ** 2
-        - 6 * a ** 2 * wbar * e1 * e2
-        + 4 * a ** 2 * wbar * e1
-        + 3 * a ** 2 * wbar * e2 ** 2
-        + 4 * a ** 2 * wbar * e2
-        - 3 * a ** 2 * wbar
-        + 4 * a ** 2 * r3bar * e1 * e2
-        - 5 * a ** 2 * r3bar * e1
-        - 5 * a ** 2 * r3bar * e2
-        + 3 * a ** 2 * r3bar
-        + 3 * a ** 2 * e1 ** 2 * r3
-        - 6 * a ** 2 * e1 * e2 * r3
-        + 2 * a ** 2 * e1 * r3 ** 3
-        + 3 * a ** 2 * e2 ** 2 * r3
-        + 2 * a ** 2 * e2 * r3 ** 3
-        - a ** 2 * r3 ** 3
-        + 9 * a * w * wbar ** 2 * e1 * r3
-        - 9 * a * w * wbar ** 2 * e2 * r3
+        -3 * a**6 * wbar
+        + 3 * a**6 * r3bar
+        + 2 * a**5 * e1
+        - 2 * a**5 * e2
+        + 9 * a**4 * w * wbar * r3
+        - 9 * a**4 * w * r3bar * r3
+        + a**4 * w * e1
+        + a**4 * w * e2
+        - 3 * a**4 * w
+        + 3 * a**4 * wbar**3
+        - 3 * a**4 * wbar**2 * r3bar
+        + 9 * a**4 * wbar * r3**2
+        - 9 * a**4 * r3bar * r3**2
+        - 9 * a**4 * e1 * r3
+        - 9 * a**4 * e2 * r3
+        + 3 * a**4 * r3
+        - 3 * a**3 * w * e1 * r3
+        + 3 * a**3 * w * e2 * r3
+        - 6 * a**3 * wbar**2 * e1
+        + 6 * a**3 * wbar**2 * e2
+        + 4 * a**3 * wbar * r3bar * e1
+        - 4 * a**3 * wbar * r3bar * e2
+        - 9 * a**3 * wbar * e1 * r3
+        + 9 * a**3 * wbar * e2 * r3
+        + 9 * a**3 * r3bar * e1 * r3
+        - 9 * a**3 * r3bar * e2 * r3
+        - a**3 * e1**2
+        - 3 * a**3 * e1 * r3**2
+        + 3 * a**3 * e1
+        + a**3 * e2**2
+        + 3 * a**3 * e2 * r3**2
+        - 3 * a**3 * e2
+        - 9 * a**2 * w * wbar**3 * r3
+        + 9 * a**2 * w * wbar**2 * r3bar * r3
+        - 3 * a**2 * w * wbar**2 * e1
+        - 3 * a**2 * w * wbar**2 * e2
+        + 9 * a**2 * w * wbar**2
+        + 2 * a**2 * w * wbar * r3bar * e1
+        + 2 * a**2 * w * wbar * r3bar * e2
+        - 6 * a**2 * w * wbar * r3bar
+        - a**2 * w * wbar * r3**3
+        + a**2 * w * r3bar * r3**3
+        + 2 * a**2 * w * e1 * r3**2
+        + 2 * a**2 * w * e2 * r3**2
+        + a**2 * w * r3**2
+        - 9 * a**2 * wbar**3 * r3**2
+        + 9 * a**2 * wbar**2 * r3bar * r3**2
+        + 9 * a**2 * wbar**2 * r3
+        + 9 * a**2 * wbar * r3bar * e1 * r3
+        + 9 * a**2 * wbar * r3bar * e2 * r3
+        - 12 * a**2 * wbar * r3bar * r3
+        + 3 * a**2 * wbar * e1**2
+        - 6 * a**2 * wbar * e1 * e2
+        + 4 * a**2 * wbar * e1
+        + 3 * a**2 * wbar * e2**2
+        + 4 * a**2 * wbar * e2
+        - 3 * a**2 * wbar
+        + 4 * a**2 * r3bar * e1 * e2
+        - 5 * a**2 * r3bar * e1
+        - 5 * a**2 * r3bar * e2
+        + 3 * a**2 * r3bar
+        + 3 * a**2 * e1**2 * r3
+        - 6 * a**2 * e1 * e2 * r3
+        + 2 * a**2 * e1 * r3**3
+        + 3 * a**2 * e2**2 * r3
+        + 2 * a**2 * e2 * r3**3
+        - a**2 * r3**3
+        + 9 * a * w * wbar**2 * e1 * r3
+        - 9 * a * w * wbar**2 * e2 * r3
         - 6 * a * w * wbar * r3bar * e1 * r3
         + 6 * a * w * wbar * r3bar * e2 * r3
         - 6 * a * w * wbar * e1
         + 6 * a * w * wbar * e2
         + 2 * a * w * r3bar * e1
         - 2 * a * w * r3bar * e2
-        + 9 * a * wbar ** 2 * e1 * r3 ** 2
-        - 9 * a * wbar ** 2 * e2 * r3 ** 2
-        - 6 * a * wbar * r3bar * e1 * r3 ** 2
-        + 6 * a * wbar * r3bar * e2 * r3 ** 2
-        - 6 * a * wbar * e1 ** 2 * r3
-        + a * wbar * e1 * r3 ** 3
+        + 9 * a * wbar**2 * e1 * r3**2
+        - 9 * a * wbar**2 * e2 * r3**2
+        - 6 * a * wbar * r3bar * e1 * r3**2
+        + 6 * a * wbar * r3bar * e2 * r3**2
+        - 6 * a * wbar * e1**2 * r3
+        + a * wbar * e1 * r3**3
         - 6 * a * wbar * e1 * r3
-        + 6 * a * wbar * e2 ** 2 * r3
-        - a * wbar * e2 * r3 ** 3
+        + 6 * a * wbar * e2**2 * r3
+        - a * wbar * e2 * r3**3
         + 6 * a * wbar * e2 * r3
-        - a * r3bar * e1 ** 2 * r3
-        - a * r3bar * e1 * r3 ** 3
+        - a * r3bar * e1**2 * r3
+        - a * r3bar * e1 * r3**3
         + 4 * a * r3bar * e1 * r3
-        + a * r3bar * e2 ** 2 * r3
-        + a * r3bar * e2 * r3 ** 3
+        + a * r3bar * e2**2 * r3
+        + a * r3bar * e2 * r3**3
         - 4 * a * r3bar * e2 * r3
-        - 2 * a * e1 ** 2 * r3 ** 2
-        - a * e1 * r3 ** 2
+        - 2 * a * e1**2 * r3**2
+        - a * e1 * r3**2
         + a * e1
-        + 2 * a * e2 ** 2 * r3 ** 2
-        + a * e2 * r3 ** 2
+        + 2 * a * e2**2 * r3**2
+        + a * e2 * r3**2
         - a * e2
-        + w * wbar ** 3 * r3 ** 3
-        - w * wbar ** 2 * r3bar * r3 ** 3
-        - 6 * w * wbar ** 2 * e1 * r3 ** 2
-        - 6 * w * wbar ** 2 * e2 * r3 ** 2
-        - 3 * w * wbar ** 2 * r3 ** 2
-        + 4 * w * wbar * r3bar * e1 * r3 ** 2
-        + 4 * w * wbar * r3bar * e2 * r3 ** 2
-        + 2 * w * wbar * r3bar * r3 ** 2
+        + w * wbar**3 * r3**3
+        - w * wbar**2 * r3bar * r3**3
+        - 6 * w * wbar**2 * e1 * r3**2
+        - 6 * w * wbar**2 * e2 * r3**2
+        - 3 * w * wbar**2 * r3**2
+        + 4 * w * wbar * r3bar * e1 * r3**2
+        + 4 * w * wbar * r3bar * e2 * r3**2
+        + 2 * w * wbar * r3bar * r3**2
         + 6 * w * wbar * e1 * r3
         + 6 * w * wbar * e2 * r3
         + 3 * w * wbar * r3
@@ -379,1106 +375,1106 @@ def _poly_coeffs_triple(w, a, r3, e1, e2):
         - 2 * w * r3bar * e2 * r3
         - w * r3bar * r3
         - w
-        - 3 * wbar ** 2 * e1 * r3 ** 3
-        - 3 * wbar ** 2 * e2 * r3 ** 3
-        + wbar ** 2 * r3 ** 3
-        + wbar * r3bar * e1 * r3 ** 3
-        + wbar * r3bar * e2 * r3 ** 3
-        + 3 * wbar * e1 ** 2 * r3 ** 2
-        + 6 * wbar * e1 * e2 * r3 ** 2
-        + 2 * wbar * e1 * r3 ** 2
-        + 3 * wbar * e2 ** 2 * r3 ** 2
-        + 2 * wbar * e2 * r3 ** 2
-        - 2 * wbar * r3 ** 2
-        + r3bar * e1 ** 2 * r3 ** 2
-        + 2 * r3bar * e1 * e2 * r3 ** 2
-        - r3bar * e1 * r3 ** 2
-        + r3bar * e2 ** 2 * r3 ** 2
-        - r3bar * e2 * r3 ** 2
+        - 3 * wbar**2 * e1 * r3**3
+        - 3 * wbar**2 * e2 * r3**3
+        + wbar**2 * r3**3
+        + wbar * r3bar * e1 * r3**3
+        + wbar * r3bar * e2 * r3**3
+        + 3 * wbar * e1**2 * r3**2
+        + 6 * wbar * e1 * e2 * r3**2
+        + 2 * wbar * e1 * r3**2
+        + 3 * wbar * e2**2 * r3**2
+        + 2 * wbar * e2 * r3**2
+        - 2 * wbar * r3**2
+        + r3bar * e1**2 * r3**2
+        + 2 * r3bar * e1 * e2 * r3**2
+        - r3bar * e1 * r3**2
+        + r3bar * e2**2 * r3**2
+        - r3bar * e2 * r3**2
         - e1 * r3
         - e2 * r3
         + r3
     )
 
     p_5 = (
-        3 * a ** 6 * w * wbar
-        - 3 * a ** 6 * w * r3bar
-        + 9 * a ** 6 * wbar * r3
-        - 9 * a ** 6 * r3bar * r3
-        - a ** 6 * e1
-        - a ** 6 * e2
-        - 2 * a ** 5 * w * e1
-        + 2 * a ** 5 * w * e2
-        - 3 * a ** 5 * wbar * e1
-        + 3 * a ** 5 * wbar * e2
-        + 3 * a ** 5 * r3bar * e1
-        - 3 * a ** 5 * r3bar * e2
-        - 6 * a ** 5 * e1 * r3
-        + 6 * a ** 5 * e2 * r3
-        - 3 * a ** 4 * w * wbar ** 3
-        + 3 * a ** 4 * w * wbar ** 2 * r3bar
-        - 9 * a ** 4 * w * wbar * r3 ** 2
-        + 9 * a ** 4 * w * r3bar * r3 ** 2
-        + 6 * a ** 4 * w * r3
-        - 9 * a ** 4 * wbar ** 3 * r3
-        + 9 * a ** 4 * wbar ** 2 * r3bar * r3
-        - 6 * a ** 4 * wbar ** 2 * e1
-        - 6 * a ** 4 * wbar ** 2 * e2
-        + 6 * a ** 4 * wbar ** 2
-        + 7 * a ** 4 * wbar * r3bar * e1
-        + 7 * a ** 4 * wbar * r3bar * e2
-        - 6 * a ** 4 * wbar * r3bar
-        - 3 * a ** 4 * wbar * r3 ** 3
-        + 3 * a ** 4 * r3bar * r3 ** 3
-        + 2 * a ** 4 * e1 ** 2
-        - 4 * a ** 4 * e1 * e2
-        + 12 * a ** 4 * e1 * r3 ** 2
-        + 2 * a ** 4 * e2 ** 2
-        + 12 * a ** 4 * e2 * r3 ** 2
-        - 6 * a ** 4 * r3 ** 2
-        + 6 * a ** 3 * w * wbar ** 2 * e1
-        - 6 * a ** 3 * w * wbar ** 2 * e2
-        - 4 * a ** 3 * w * wbar * r3bar * e1
-        + 4 * a ** 3 * w * wbar * r3bar * e2
-        + 3 * a ** 3 * w * e1 * r3 ** 2
-        - 3 * a ** 3 * w * e2 * r3 ** 2
-        + 18 * a ** 3 * wbar ** 2 * e1 * r3
-        - 18 * a ** 3 * wbar ** 2 * e2 * r3
-        - 12 * a ** 3 * wbar * r3bar * e1 * r3
-        + 12 * a ** 3 * wbar * r3bar * e2 * r3
-        + 6 * a ** 3 * wbar * e1 ** 2
-        + 9 * a ** 3 * wbar * e1 * r3 ** 2
-        - 8 * a ** 3 * wbar * e1
-        - 6 * a ** 3 * wbar * e2 ** 2
-        - 9 * a ** 3 * wbar * e2 * r3 ** 2
-        + 8 * a ** 3 * wbar * e2
-        - 4 * a ** 3 * r3bar * e1 ** 2
-        - 9 * a ** 3 * r3bar * e1 * r3 ** 2
-        + 4 * a ** 3 * r3bar * e1
-        + 4 * a ** 3 * r3bar * e2 ** 2
-        + 9 * a ** 3 * r3bar * e2 * r3 ** 2
-        - 4 * a ** 3 * r3bar * e2
-        + a ** 3 * e1 * r3 ** 3
-        - 6 * a ** 3 * e1 * r3
-        - a ** 3 * e2 * r3 ** 3
-        + 6 * a ** 3 * e2 * r3
-        + 9 * a ** 2 * w * wbar ** 3 * r3 ** 2
-        - 9 * a ** 2 * w * wbar ** 2 * r3bar * r3 ** 2
-        - 18 * a ** 2 * w * wbar ** 2 * r3
-        + 12 * a ** 2 * w * wbar * r3bar * r3
-        - 3 * a ** 2 * w * wbar * e1 ** 2
-        + 6 * a ** 2 * w * wbar * e1 * e2
-        - 6 * a ** 2 * w * wbar * e1
-        - 3 * a ** 2 * w * wbar * e2 ** 2
-        - 6 * a ** 2 * w * wbar * e2
-        + 9 * a ** 2 * w * wbar
-        + a ** 2 * w * r3bar * e1 ** 2
-        - 2 * a ** 2 * w * r3bar * e1 * e2
-        + 2 * a ** 2 * w * r3bar * e1
-        + a ** 2 * w * r3bar * e2 ** 2
-        + 2 * a ** 2 * w * r3bar * e2
-        - 3 * a ** 2 * w * r3bar
-        - a ** 2 * w * e1 * r3 ** 3
-        - a ** 2 * w * e2 * r3 ** 3
-        + 3 * a ** 2 * wbar ** 3 * r3 ** 3
-        - 3 * a ** 2 * wbar ** 2 * r3bar * r3 ** 3
-        - 9 * a ** 2 * wbar ** 2 * e1 * r3 ** 2
-        - 9 * a ** 2 * wbar ** 2 * e2 * r3 ** 2
-        - 3 * a ** 2 * wbar * r3bar * e1 * r3 ** 2
-        - 3 * a ** 2 * wbar * r3bar * e2 * r3 ** 2
-        + 6 * a ** 2 * wbar * r3bar * r3 ** 2
-        - 15 * a ** 2 * wbar * e1 ** 2 * r3
-        + 6 * a ** 2 * wbar * e1 * e2 * r3
-        + 6 * a ** 2 * wbar * e1 * r3
-        - 15 * a ** 2 * wbar * e2 ** 2 * r3
-        + 6 * a ** 2 * wbar * e2 * r3
-        - 3 * a ** 2 * wbar * r3
-        + 5 * a ** 2 * r3bar * e1 ** 2 * r3
-        - 2 * a ** 2 * r3bar * e1 * e2 * r3
-        + 4 * a ** 2 * r3bar * e1 * r3
-        + 5 * a ** 2 * r3bar * e2 ** 2 * r3
-        + 4 * a ** 2 * r3bar * e2 * r3
-        - 3 * a ** 2 * r3bar * r3
-        - 3 * a ** 2 * e1 ** 2 * r3 ** 2
-        + 2 * a ** 2 * e1 ** 2
-        + 6 * a ** 2 * e1 * e2 * r3 ** 2
-        - 4 * a ** 2 * e1 * e2
-        + a ** 2 * e1
-        - 3 * a ** 2 * e2 ** 2 * r3 ** 2
-        + 2 * a ** 2 * e2 ** 2
-        + a ** 2 * e2
-        - 9 * a * w * wbar ** 2 * e1 * r3 ** 2
-        + 9 * a * w * wbar ** 2 * e2 * r3 ** 2
-        + 6 * a * w * wbar * r3bar * e1 * r3 ** 2
-        - 6 * a * w * wbar * r3bar * e2 * r3 ** 2
-        + 6 * a * w * wbar * e1 ** 2 * r3
+        3 * a**6 * w * wbar
+        - 3 * a**6 * w * r3bar
+        + 9 * a**6 * wbar * r3
+        - 9 * a**6 * r3bar * r3
+        - a**6 * e1
+        - a**6 * e2
+        - 2 * a**5 * w * e1
+        + 2 * a**5 * w * e2
+        - 3 * a**5 * wbar * e1
+        + 3 * a**5 * wbar * e2
+        + 3 * a**5 * r3bar * e1
+        - 3 * a**5 * r3bar * e2
+        - 6 * a**5 * e1 * r3
+        + 6 * a**5 * e2 * r3
+        - 3 * a**4 * w * wbar**3
+        + 3 * a**4 * w * wbar**2 * r3bar
+        - 9 * a**4 * w * wbar * r3**2
+        + 9 * a**4 * w * r3bar * r3**2
+        + 6 * a**4 * w * r3
+        - 9 * a**4 * wbar**3 * r3
+        + 9 * a**4 * wbar**2 * r3bar * r3
+        - 6 * a**4 * wbar**2 * e1
+        - 6 * a**4 * wbar**2 * e2
+        + 6 * a**4 * wbar**2
+        + 7 * a**4 * wbar * r3bar * e1
+        + 7 * a**4 * wbar * r3bar * e2
+        - 6 * a**4 * wbar * r3bar
+        - 3 * a**4 * wbar * r3**3
+        + 3 * a**4 * r3bar * r3**3
+        + 2 * a**4 * e1**2
+        - 4 * a**4 * e1 * e2
+        + 12 * a**4 * e1 * r3**2
+        + 2 * a**4 * e2**2
+        + 12 * a**4 * e2 * r3**2
+        - 6 * a**4 * r3**2
+        + 6 * a**3 * w * wbar**2 * e1
+        - 6 * a**3 * w * wbar**2 * e2
+        - 4 * a**3 * w * wbar * r3bar * e1
+        + 4 * a**3 * w * wbar * r3bar * e2
+        + 3 * a**3 * w * e1 * r3**2
+        - 3 * a**3 * w * e2 * r3**2
+        + 18 * a**3 * wbar**2 * e1 * r3
+        - 18 * a**3 * wbar**2 * e2 * r3
+        - 12 * a**3 * wbar * r3bar * e1 * r3
+        + 12 * a**3 * wbar * r3bar * e2 * r3
+        + 6 * a**3 * wbar * e1**2
+        + 9 * a**3 * wbar * e1 * r3**2
+        - 8 * a**3 * wbar * e1
+        - 6 * a**3 * wbar * e2**2
+        - 9 * a**3 * wbar * e2 * r3**2
+        + 8 * a**3 * wbar * e2
+        - 4 * a**3 * r3bar * e1**2
+        - 9 * a**3 * r3bar * e1 * r3**2
+        + 4 * a**3 * r3bar * e1
+        + 4 * a**3 * r3bar * e2**2
+        + 9 * a**3 * r3bar * e2 * r3**2
+        - 4 * a**3 * r3bar * e2
+        + a**3 * e1 * r3**3
+        - 6 * a**3 * e1 * r3
+        - a**3 * e2 * r3**3
+        + 6 * a**3 * e2 * r3
+        + 9 * a**2 * w * wbar**3 * r3**2
+        - 9 * a**2 * w * wbar**2 * r3bar * r3**2
+        - 18 * a**2 * w * wbar**2 * r3
+        + 12 * a**2 * w * wbar * r3bar * r3
+        - 3 * a**2 * w * wbar * e1**2
+        + 6 * a**2 * w * wbar * e1 * e2
+        - 6 * a**2 * w * wbar * e1
+        - 3 * a**2 * w * wbar * e2**2
+        - 6 * a**2 * w * wbar * e2
+        + 9 * a**2 * w * wbar
+        + a**2 * w * r3bar * e1**2
+        - 2 * a**2 * w * r3bar * e1 * e2
+        + 2 * a**2 * w * r3bar * e1
+        + a**2 * w * r3bar * e2**2
+        + 2 * a**2 * w * r3bar * e2
+        - 3 * a**2 * w * r3bar
+        - a**2 * w * e1 * r3**3
+        - a**2 * w * e2 * r3**3
+        + 3 * a**2 * wbar**3 * r3**3
+        - 3 * a**2 * wbar**2 * r3bar * r3**3
+        - 9 * a**2 * wbar**2 * e1 * r3**2
+        - 9 * a**2 * wbar**2 * e2 * r3**2
+        - 3 * a**2 * wbar * r3bar * e1 * r3**2
+        - 3 * a**2 * wbar * r3bar * e2 * r3**2
+        + 6 * a**2 * wbar * r3bar * r3**2
+        - 15 * a**2 * wbar * e1**2 * r3
+        + 6 * a**2 * wbar * e1 * e2 * r3
+        + 6 * a**2 * wbar * e1 * r3
+        - 15 * a**2 * wbar * e2**2 * r3
+        + 6 * a**2 * wbar * e2 * r3
+        - 3 * a**2 * wbar * r3
+        + 5 * a**2 * r3bar * e1**2 * r3
+        - 2 * a**2 * r3bar * e1 * e2 * r3
+        + 4 * a**2 * r3bar * e1 * r3
+        + 5 * a**2 * r3bar * e2**2 * r3
+        + 4 * a**2 * r3bar * e2 * r3
+        - 3 * a**2 * r3bar * r3
+        - 3 * a**2 * e1**2 * r3**2
+        + 2 * a**2 * e1**2
+        + 6 * a**2 * e1 * e2 * r3**2
+        - 4 * a**2 * e1 * e2
+        + a**2 * e1
+        - 3 * a**2 * e2**2 * r3**2
+        + 2 * a**2 * e2**2
+        + a**2 * e2
+        - 9 * a * w * wbar**2 * e1 * r3**2
+        + 9 * a * w * wbar**2 * e2 * r3**2
+        + 6 * a * w * wbar * r3bar * e1 * r3**2
+        - 6 * a * w * wbar * r3bar * e2 * r3**2
+        + 6 * a * w * wbar * e1**2 * r3
         + 12 * a * w * wbar * e1 * r3
-        - 6 * a * w * wbar * e2 ** 2 * r3
+        - 6 * a * w * wbar * e2**2 * r3
         - 12 * a * w * wbar * e2 * r3
-        - 2 * a * w * r3bar * e1 ** 2 * r3
+        - 2 * a * w * r3bar * e1**2 * r3
         - 4 * a * w * r3bar * e1 * r3
-        + 2 * a * w * r3bar * e2 ** 2 * r3
+        + 2 * a * w * r3bar * e2**2 * r3
         + 4 * a * w * r3bar * e2 * r3
         - 3 * a * w * e1
         + 3 * a * w * e2
-        - 3 * a * wbar ** 2 * e1 * r3 ** 3
-        + 3 * a * wbar ** 2 * e2 * r3 ** 3
-        + 2 * a * wbar * r3bar * e1 * r3 ** 3
-        - 2 * a * wbar * r3bar * e2 * r3 ** 3
-        + 12 * a * wbar * e1 ** 2 * r3 ** 2
-        - 12 * a * wbar * e2 ** 2 * r3 ** 2
-        - a * r3bar * e1 ** 2 * r3 ** 2
-        - 2 * a * r3bar * e1 * r3 ** 2
-        + a * r3bar * e2 ** 2 * r3 ** 2
-        + 2 * a * r3bar * e2 * r3 ** 2
-        + a * e1 ** 2 * r3 ** 3
-        - 4 * a * e1 ** 2 * r3
+        - 3 * a * wbar**2 * e1 * r3**3
+        + 3 * a * wbar**2 * e2 * r3**3
+        + 2 * a * wbar * r3bar * e1 * r3**3
+        - 2 * a * wbar * r3bar * e2 * r3**3
+        + 12 * a * wbar * e1**2 * r3**2
+        - 12 * a * wbar * e2**2 * r3**2
+        - a * r3bar * e1**2 * r3**2
+        - 2 * a * r3bar * e1 * r3**2
+        + a * r3bar * e2**2 * r3**2
+        + 2 * a * r3bar * e2 * r3**2
+        + a * e1**2 * r3**3
+        - 4 * a * e1**2 * r3
         + a * e1 * r3
-        - a * e2 ** 2 * r3 ** 3
-        + 4 * a * e2 ** 2 * r3
+        - a * e2**2 * r3**3
+        + 4 * a * e2**2 * r3
         - a * e2 * r3
-        + 3 * w * wbar ** 2 * e1 * r3 ** 3
-        + 3 * w * wbar ** 2 * e2 * r3 ** 3
-        - 2 * w * wbar * r3bar * e1 * r3 ** 3
-        - 2 * w * wbar * r3bar * e2 * r3 ** 3
-        - 3 * w * wbar * e1 ** 2 * r3 ** 2
-        - 6 * w * wbar * e1 * e2 * r3 ** 2
-        - 6 * w * wbar * e1 * r3 ** 2
-        - 3 * w * wbar * e2 ** 2 * r3 ** 2
-        - 6 * w * wbar * e2 * r3 ** 2
-        + w * r3bar * e1 ** 2 * r3 ** 2
-        + 2 * w * r3bar * e1 * e2 * r3 ** 2
-        + 2 * w * r3bar * e1 * r3 ** 2
-        + w * r3bar * e2 ** 2 * r3 ** 2
-        + 2 * w * r3bar * e2 * r3 ** 2
+        + 3 * w * wbar**2 * e1 * r3**3
+        + 3 * w * wbar**2 * e2 * r3**3
+        - 2 * w * wbar * r3bar * e1 * r3**3
+        - 2 * w * wbar * r3bar * e2 * r3**3
+        - 3 * w * wbar * e1**2 * r3**2
+        - 6 * w * wbar * e1 * e2 * r3**2
+        - 6 * w * wbar * e1 * r3**2
+        - 3 * w * wbar * e2**2 * r3**2
+        - 6 * w * wbar * e2 * r3**2
+        + w * r3bar * e1**2 * r3**2
+        + 2 * w * r3bar * e1 * e2 * r3**2
+        + 2 * w * r3bar * e1 * r3**2
+        + w * r3bar * e2**2 * r3**2
+        + 2 * w * r3bar * e2 * r3**2
         + 3 * w * e1 * r3
         + 3 * w * e2 * r3
-        - 3 * wbar * e1 ** 2 * r3 ** 3
-        - 6 * wbar * e1 * e2 * r3 ** 3
-        + 2 * wbar * e1 * r3 ** 3
-        - 3 * wbar * e2 ** 2 * r3 ** 3
-        + 2 * wbar * e2 * r3 ** 3
-        + 2 * e1 ** 2 * r3 ** 2
-        + 4 * e1 * e2 * r3 ** 2
-        - 2 * e1 * r3 ** 2
-        + 2 * e2 ** 2 * r3 ** 2
-        - 2 * e2 * r3 ** 2
+        - 3 * wbar * e1**2 * r3**3
+        - 6 * wbar * e1 * e2 * r3**3
+        + 2 * wbar * e1 * r3**3
+        - 3 * wbar * e2**2 * r3**3
+        + 2 * wbar * e2 * r3**3
+        + 2 * e1**2 * r3**2
+        + 4 * e1 * e2 * r3**2
+        - 2 * e1 * r3**2
+        + 2 * e2**2 * r3**2
+        - 2 * e2 * r3**2
     )
 
     p_6 = (
-        a ** 8 * wbar
-        - a ** 8 * r3bar
-        - a ** 7 * e1
-        + a ** 7 * e2
-        - 9 * a ** 6 * w * wbar * r3
-        + 9 * a ** 6 * w * r3bar * r3
-        - 2 * a ** 6 * w * e1
-        - 2 * a ** 6 * w * e2
-        + 3 * a ** 6 * w
-        - a ** 6 * wbar ** 3
-        + a ** 6 * wbar ** 2 * r3bar
-        - 9 * a ** 6 * wbar * r3 ** 2
-        + 9 * a ** 6 * r3bar * r3 ** 2
-        + 6 * a ** 6 * e1 * r3
-        + 6 * a ** 6 * e2 * r3
-        - 3 * a ** 6 * r3
-        + 6 * a ** 5 * w * e1 * r3
-        - 6 * a ** 5 * w * e2 * r3
-        + 3 * a ** 5 * wbar ** 2 * e1
-        - 3 * a ** 5 * wbar ** 2 * e2
-        - 2 * a ** 5 * wbar * r3bar * e1
-        + 2 * a ** 5 * wbar * r3bar * e2
-        + 9 * a ** 5 * wbar * e1 * r3
-        - 9 * a ** 5 * wbar * e2 * r3
-        - 9 * a ** 5 * r3bar * e1 * r3
-        + 9 * a ** 5 * r3bar * e2 * r3
-        + 2 * a ** 5 * e1 ** 2
-        + 6 * a ** 5 * e1 * r3 ** 2
-        - 3 * a ** 5 * e1
-        - 2 * a ** 5 * e2 ** 2
-        - 6 * a ** 5 * e2 * r3 ** 2
-        + 3 * a ** 5 * e2
-        + 9 * a ** 4 * w * wbar ** 3 * r3
-        - 9 * a ** 4 * w * wbar ** 2 * r3bar * r3
-        + 6 * a ** 4 * w * wbar ** 2 * e1
-        + 6 * a ** 4 * w * wbar ** 2 * e2
-        - 9 * a ** 4 * w * wbar ** 2
-        - 4 * a ** 4 * w * wbar * r3bar * e1
-        - 4 * a ** 4 * w * wbar * r3bar * e2
-        + 6 * a ** 4 * w * wbar * r3bar
-        + 3 * a ** 4 * w * wbar * r3 ** 3
-        - 3 * a ** 4 * w * r3bar * r3 ** 3
-        - 3 * a ** 4 * w * e1 * r3 ** 2
-        - 3 * a ** 4 * w * e2 * r3 ** 2
-        - 3 * a ** 4 * w * r3 ** 2
-        + 9 * a ** 4 * wbar ** 3 * r3 ** 2
-        - 9 * a ** 4 * wbar ** 2 * r3bar * r3 ** 2
-        + 9 * a ** 4 * wbar ** 2 * e1 * r3
-        + 9 * a ** 4 * wbar ** 2 * e2 * r3
-        - 9 * a ** 4 * wbar ** 2 * r3
-        - 15 * a ** 4 * wbar * r3bar * e1 * r3
-        - 15 * a ** 4 * wbar * r3bar * e2 * r3
-        + 12 * a ** 4 * wbar * r3bar * r3
-        + 12 * a ** 4 * wbar * e1 * e2
-        - 8 * a ** 4 * wbar * e1
-        - 8 * a ** 4 * wbar * e2
-        + 3 * a ** 4 * wbar
-        - 2 * a ** 4 * r3bar * e1 ** 2
-        - 8 * a ** 4 * r3bar * e1 * e2
-        + 7 * a ** 4 * r3bar * e1
-        - 2 * a ** 4 * r3bar * e2 ** 2
-        + 7 * a ** 4 * r3bar * e2
-        - 3 * a ** 4 * r3bar
-        - 6 * a ** 4 * e1 ** 2 * r3
-        + 12 * a ** 4 * e1 * e2 * r3
-        - 5 * a ** 4 * e1 * r3 ** 3
-        - 6 * a ** 4 * e2 ** 2 * r3
-        - 5 * a ** 4 * e2 * r3 ** 3
-        + 3 * a ** 4 * r3 ** 3
-        - 18 * a ** 3 * w * wbar ** 2 * e1 * r3
-        + 18 * a ** 3 * w * wbar ** 2 * e2 * r3
-        + 12 * a ** 3 * w * wbar * r3bar * e1 * r3
-        - 12 * a ** 3 * w * wbar * r3bar * e2 * r3
-        - 6 * a ** 3 * w * wbar * e1 ** 2
-        + 12 * a ** 3 * w * wbar * e1
-        + 6 * a ** 3 * w * wbar * e2 ** 2
-        - 12 * a ** 3 * w * wbar * e2
-        + 2 * a ** 3 * w * r3bar * e1 ** 2
-        - 4 * a ** 3 * w * r3bar * e1
-        - 2 * a ** 3 * w * r3bar * e2 ** 2
-        + 4 * a ** 3 * w * r3bar * e2
-        - a ** 3 * w * e1 * r3 ** 3
-        + a ** 3 * w * e2 * r3 ** 3
-        - 18 * a ** 3 * wbar ** 2 * e1 * r3 ** 2
-        + 18 * a ** 3 * wbar ** 2 * e2 * r3 ** 2
-        + 12 * a ** 3 * wbar * r3bar * e1 * r3 ** 2
-        - 12 * a ** 3 * wbar * r3bar * e2 * r3 ** 2
-        - 6 * a ** 3 * wbar * e1 ** 2 * r3
-        - 3 * a ** 3 * wbar * e1 * r3 ** 3
-        + 12 * a ** 3 * wbar * e1 * r3
-        + 6 * a ** 3 * wbar * e2 ** 2 * r3
-        + 3 * a ** 3 * wbar * e2 * r3 ** 3
-        - 12 * a ** 3 * wbar * e2 * r3
-        + 8 * a ** 3 * r3bar * e1 ** 2 * r3
-        + 3 * a ** 3 * r3bar * e1 * r3 ** 3
-        - 8 * a ** 3 * r3bar * e1 * r3
-        - 8 * a ** 3 * r3bar * e2 ** 2 * r3
-        - 3 * a ** 3 * r3bar * e2 * r3 ** 3
-        + 8 * a ** 3 * r3bar * e2 * r3
-        + a ** 3 * e1 ** 3
-        - 3 * a ** 3 * e1 ** 2 * e2
-        + 3 * a ** 3 * e1 ** 2 * r3 ** 2
-        + 4 * a ** 3 * e1 ** 2
-        + 3 * a ** 3 * e1 * e2 ** 2
-        + 3 * a ** 3 * e1 * r3 ** 2
-        - 2 * a ** 3 * e1
-        - a ** 3 * e2 ** 3
-        - 3 * a ** 3 * e2 ** 2 * r3 ** 2
-        - 4 * a ** 3 * e2 ** 2
-        - 3 * a ** 3 * e2 * r3 ** 2
-        + 2 * a ** 3 * e2
-        - 3 * a ** 2 * w * wbar ** 3 * r3 ** 3
-        + 3 * a ** 2 * w * wbar ** 2 * r3bar * r3 ** 3
-        + 9 * a ** 2 * w * wbar ** 2 * e1 * r3 ** 2
-        + 9 * a ** 2 * w * wbar ** 2 * e2 * r3 ** 2
-        + 9 * a ** 2 * w * wbar ** 2 * r3 ** 2
-        - 6 * a ** 2 * w * wbar * r3bar * e1 * r3 ** 2
-        - 6 * a ** 2 * w * wbar * r3bar * e2 * r3 ** 2
-        - 6 * a ** 2 * w * wbar * r3bar * r3 ** 2
-        + 15 * a ** 2 * w * wbar * e1 ** 2 * r3
-        - 6 * a ** 2 * w * wbar * e1 * e2 * r3
-        - 6 * a ** 2 * w * wbar * e1 * r3
-        + 15 * a ** 2 * w * wbar * e2 ** 2 * r3
-        - 6 * a ** 2 * w * wbar * e2 * r3
-        - 9 * a ** 2 * w * wbar * r3
-        - 5 * a ** 2 * w * r3bar * e1 ** 2 * r3
-        + 2 * a ** 2 * w * r3bar * e1 * e2 * r3
-        + 2 * a ** 2 * w * r3bar * e1 * r3
-        - 5 * a ** 2 * w * r3bar * e2 ** 2 * r3
-        + 2 * a ** 2 * w * r3bar * e2 * r3
-        + 3 * a ** 2 * w * r3bar * r3
-        - 3 * a ** 2 * w * e1 ** 2
-        + 6 * a ** 2 * w * e1 * e2
-        - 3 * a ** 2 * w * e1
-        - 3 * a ** 2 * w * e2 ** 2
-        - 3 * a ** 2 * w * e2
-        + 3 * a ** 2 * w
-        + 6 * a ** 2 * wbar ** 2 * e1 * r3 ** 3
-        + 6 * a ** 2 * wbar ** 2 * e2 * r3 ** 3
-        - 3 * a ** 2 * wbar ** 2 * r3 ** 3
-        - a ** 2 * wbar * r3bar * e1 * r3 ** 3
-        - a ** 2 * wbar * r3bar * e2 * r3 ** 3
-        + 12 * a ** 2 * wbar * e1 ** 2 * r3 ** 2
-        - 12 * a ** 2 * wbar * e1 * e2 * r3 ** 2
-        - 6 * a ** 2 * wbar * e1 * r3 ** 2
-        + 12 * a ** 2 * wbar * e2 ** 2 * r3 ** 2
-        - 6 * a ** 2 * wbar * e2 * r3 ** 2
-        + 6 * a ** 2 * wbar * r3 ** 2
-        - 7 * a ** 2 * r3bar * e1 ** 2 * r3 ** 2
-        - 2 * a ** 2 * r3bar * e1 * e2 * r3 ** 2
-        + a ** 2 * r3bar * e1 * r3 ** 2
-        - 7 * a ** 2 * r3bar * e2 ** 2 * r3 ** 2
-        + a ** 2 * r3bar * e2 * r3 ** 2
-        - 3 * a ** 2 * e1 ** 3 * r3
-        + 3 * a ** 2 * e1 ** 2 * e2 * r3
-        + a ** 2 * e1 ** 2 * r3 ** 3
-        - 7 * a ** 2 * e1 ** 2 * r3
-        + 3 * a ** 2 * e1 * e2 ** 2 * r3
-        - 2 * a ** 2 * e1 * e2 * r3 ** 3
-        - 2 * a ** 2 * e1 * e2 * r3
-        + 4 * a ** 2 * e1 * r3
-        - 3 * a ** 2 * e2 ** 3 * r3
-        + a ** 2 * e2 ** 2 * r3 ** 3
-        - 7 * a ** 2 * e2 ** 2 * r3
-        + 4 * a ** 2 * e2 * r3
-        - 3 * a ** 2 * r3
-        + 3 * a * w * wbar ** 2 * e1 * r3 ** 3
-        - 3 * a * w * wbar ** 2 * e2 * r3 ** 3
-        - 2 * a * w * wbar * r3bar * e1 * r3 ** 3
-        + 2 * a * w * wbar * r3bar * e2 * r3 ** 3
-        - 12 * a * w * wbar * e1 ** 2 * r3 ** 2
-        - 6 * a * w * wbar * e1 * r3 ** 2
-        + 12 * a * w * wbar * e2 ** 2 * r3 ** 2
-        + 6 * a * w * wbar * e2 * r3 ** 2
-        + 4 * a * w * r3bar * e1 ** 2 * r3 ** 2
-        + 2 * a * w * r3bar * e1 * r3 ** 2
-        - 4 * a * w * r3bar * e2 ** 2 * r3 ** 2
-        - 2 * a * w * r3bar * e2 * r3 ** 2
-        + 6 * a * w * e1 ** 2 * r3
+        a**8 * wbar
+        - a**8 * r3bar
+        - a**7 * e1
+        + a**7 * e2
+        - 9 * a**6 * w * wbar * r3
+        + 9 * a**6 * w * r3bar * r3
+        - 2 * a**6 * w * e1
+        - 2 * a**6 * w * e2
+        + 3 * a**6 * w
+        - a**6 * wbar**3
+        + a**6 * wbar**2 * r3bar
+        - 9 * a**6 * wbar * r3**2
+        + 9 * a**6 * r3bar * r3**2
+        + 6 * a**6 * e1 * r3
+        + 6 * a**6 * e2 * r3
+        - 3 * a**6 * r3
+        + 6 * a**5 * w * e1 * r3
+        - 6 * a**5 * w * e2 * r3
+        + 3 * a**5 * wbar**2 * e1
+        - 3 * a**5 * wbar**2 * e2
+        - 2 * a**5 * wbar * r3bar * e1
+        + 2 * a**5 * wbar * r3bar * e2
+        + 9 * a**5 * wbar * e1 * r3
+        - 9 * a**5 * wbar * e2 * r3
+        - 9 * a**5 * r3bar * e1 * r3
+        + 9 * a**5 * r3bar * e2 * r3
+        + 2 * a**5 * e1**2
+        + 6 * a**5 * e1 * r3**2
+        - 3 * a**5 * e1
+        - 2 * a**5 * e2**2
+        - 6 * a**5 * e2 * r3**2
+        + 3 * a**5 * e2
+        + 9 * a**4 * w * wbar**3 * r3
+        - 9 * a**4 * w * wbar**2 * r3bar * r3
+        + 6 * a**4 * w * wbar**2 * e1
+        + 6 * a**4 * w * wbar**2 * e2
+        - 9 * a**4 * w * wbar**2
+        - 4 * a**4 * w * wbar * r3bar * e1
+        - 4 * a**4 * w * wbar * r3bar * e2
+        + 6 * a**4 * w * wbar * r3bar
+        + 3 * a**4 * w * wbar * r3**3
+        - 3 * a**4 * w * r3bar * r3**3
+        - 3 * a**4 * w * e1 * r3**2
+        - 3 * a**4 * w * e2 * r3**2
+        - 3 * a**4 * w * r3**2
+        + 9 * a**4 * wbar**3 * r3**2
+        - 9 * a**4 * wbar**2 * r3bar * r3**2
+        + 9 * a**4 * wbar**2 * e1 * r3
+        + 9 * a**4 * wbar**2 * e2 * r3
+        - 9 * a**4 * wbar**2 * r3
+        - 15 * a**4 * wbar * r3bar * e1 * r3
+        - 15 * a**4 * wbar * r3bar * e2 * r3
+        + 12 * a**4 * wbar * r3bar * r3
+        + 12 * a**4 * wbar * e1 * e2
+        - 8 * a**4 * wbar * e1
+        - 8 * a**4 * wbar * e2
+        + 3 * a**4 * wbar
+        - 2 * a**4 * r3bar * e1**2
+        - 8 * a**4 * r3bar * e1 * e2
+        + 7 * a**4 * r3bar * e1
+        - 2 * a**4 * r3bar * e2**2
+        + 7 * a**4 * r3bar * e2
+        - 3 * a**4 * r3bar
+        - 6 * a**4 * e1**2 * r3
+        + 12 * a**4 * e1 * e2 * r3
+        - 5 * a**4 * e1 * r3**3
+        - 6 * a**4 * e2**2 * r3
+        - 5 * a**4 * e2 * r3**3
+        + 3 * a**4 * r3**3
+        - 18 * a**3 * w * wbar**2 * e1 * r3
+        + 18 * a**3 * w * wbar**2 * e2 * r3
+        + 12 * a**3 * w * wbar * r3bar * e1 * r3
+        - 12 * a**3 * w * wbar * r3bar * e2 * r3
+        - 6 * a**3 * w * wbar * e1**2
+        + 12 * a**3 * w * wbar * e1
+        + 6 * a**3 * w * wbar * e2**2
+        - 12 * a**3 * w * wbar * e2
+        + 2 * a**3 * w * r3bar * e1**2
+        - 4 * a**3 * w * r3bar * e1
+        - 2 * a**3 * w * r3bar * e2**2
+        + 4 * a**3 * w * r3bar * e2
+        - a**3 * w * e1 * r3**3
+        + a**3 * w * e2 * r3**3
+        - 18 * a**3 * wbar**2 * e1 * r3**2
+        + 18 * a**3 * wbar**2 * e2 * r3**2
+        + 12 * a**3 * wbar * r3bar * e1 * r3**2
+        - 12 * a**3 * wbar * r3bar * e2 * r3**2
+        - 6 * a**3 * wbar * e1**2 * r3
+        - 3 * a**3 * wbar * e1 * r3**3
+        + 12 * a**3 * wbar * e1 * r3
+        + 6 * a**3 * wbar * e2**2 * r3
+        + 3 * a**3 * wbar * e2 * r3**3
+        - 12 * a**3 * wbar * e2 * r3
+        + 8 * a**3 * r3bar * e1**2 * r3
+        + 3 * a**3 * r3bar * e1 * r3**3
+        - 8 * a**3 * r3bar * e1 * r3
+        - 8 * a**3 * r3bar * e2**2 * r3
+        - 3 * a**3 * r3bar * e2 * r3**3
+        + 8 * a**3 * r3bar * e2 * r3
+        + a**3 * e1**3
+        - 3 * a**3 * e1**2 * e2
+        + 3 * a**3 * e1**2 * r3**2
+        + 4 * a**3 * e1**2
+        + 3 * a**3 * e1 * e2**2
+        + 3 * a**3 * e1 * r3**2
+        - 2 * a**3 * e1
+        - a**3 * e2**3
+        - 3 * a**3 * e2**2 * r3**2
+        - 4 * a**3 * e2**2
+        - 3 * a**3 * e2 * r3**2
+        + 2 * a**3 * e2
+        - 3 * a**2 * w * wbar**3 * r3**3
+        + 3 * a**2 * w * wbar**2 * r3bar * r3**3
+        + 9 * a**2 * w * wbar**2 * e1 * r3**2
+        + 9 * a**2 * w * wbar**2 * e2 * r3**2
+        + 9 * a**2 * w * wbar**2 * r3**2
+        - 6 * a**2 * w * wbar * r3bar * e1 * r3**2
+        - 6 * a**2 * w * wbar * r3bar * e2 * r3**2
+        - 6 * a**2 * w * wbar * r3bar * r3**2
+        + 15 * a**2 * w * wbar * e1**2 * r3
+        - 6 * a**2 * w * wbar * e1 * e2 * r3
+        - 6 * a**2 * w * wbar * e1 * r3
+        + 15 * a**2 * w * wbar * e2**2 * r3
+        - 6 * a**2 * w * wbar * e2 * r3
+        - 9 * a**2 * w * wbar * r3
+        - 5 * a**2 * w * r3bar * e1**2 * r3
+        + 2 * a**2 * w * r3bar * e1 * e2 * r3
+        + 2 * a**2 * w * r3bar * e1 * r3
+        - 5 * a**2 * w * r3bar * e2**2 * r3
+        + 2 * a**2 * w * r3bar * e2 * r3
+        + 3 * a**2 * w * r3bar * r3
+        - 3 * a**2 * w * e1**2
+        + 6 * a**2 * w * e1 * e2
+        - 3 * a**2 * w * e1
+        - 3 * a**2 * w * e2**2
+        - 3 * a**2 * w * e2
+        + 3 * a**2 * w
+        + 6 * a**2 * wbar**2 * e1 * r3**3
+        + 6 * a**2 * wbar**2 * e2 * r3**3
+        - 3 * a**2 * wbar**2 * r3**3
+        - a**2 * wbar * r3bar * e1 * r3**3
+        - a**2 * wbar * r3bar * e2 * r3**3
+        + 12 * a**2 * wbar * e1**2 * r3**2
+        - 12 * a**2 * wbar * e1 * e2 * r3**2
+        - 6 * a**2 * wbar * e1 * r3**2
+        + 12 * a**2 * wbar * e2**2 * r3**2
+        - 6 * a**2 * wbar * e2 * r3**2
+        + 6 * a**2 * wbar * r3**2
+        - 7 * a**2 * r3bar * e1**2 * r3**2
+        - 2 * a**2 * r3bar * e1 * e2 * r3**2
+        + a**2 * r3bar * e1 * r3**2
+        - 7 * a**2 * r3bar * e2**2 * r3**2
+        + a**2 * r3bar * e2 * r3**2
+        - 3 * a**2 * e1**3 * r3
+        + 3 * a**2 * e1**2 * e2 * r3
+        + a**2 * e1**2 * r3**3
+        - 7 * a**2 * e1**2 * r3
+        + 3 * a**2 * e1 * e2**2 * r3
+        - 2 * a**2 * e1 * e2 * r3**3
+        - 2 * a**2 * e1 * e2 * r3
+        + 4 * a**2 * e1 * r3
+        - 3 * a**2 * e2**3 * r3
+        + a**2 * e2**2 * r3**3
+        - 7 * a**2 * e2**2 * r3
+        + 4 * a**2 * e2 * r3
+        - 3 * a**2 * r3
+        + 3 * a * w * wbar**2 * e1 * r3**3
+        - 3 * a * w * wbar**2 * e2 * r3**3
+        - 2 * a * w * wbar * r3bar * e1 * r3**3
+        + 2 * a * w * wbar * r3bar * e2 * r3**3
+        - 12 * a * w * wbar * e1**2 * r3**2
+        - 6 * a * w * wbar * e1 * r3**2
+        + 12 * a * w * wbar * e2**2 * r3**2
+        + 6 * a * w * wbar * e2 * r3**2
+        + 4 * a * w * r3bar * e1**2 * r3**2
+        + 2 * a * w * r3bar * e1 * r3**2
+        - 4 * a * w * r3bar * e2**2 * r3**2
+        - 2 * a * w * r3bar * e2 * r3**2
+        + 6 * a * w * e1**2 * r3
         + 3 * a * w * e1 * r3
-        - 6 * a * w * e2 ** 2 * r3
+        - 6 * a * w * e2**2 * r3
         - 3 * a * w * e2 * r3
-        - 6 * a * wbar * e1 ** 2 * r3 ** 3
-        + 2 * a * wbar * e1 * r3 ** 3
-        + 6 * a * wbar * e2 ** 2 * r3 ** 3
-        - 2 * a * wbar * e2 * r3 ** 3
-        + a * r3bar * e1 ** 2 * r3 ** 3
-        - a * r3bar * e2 ** 2 * r3 ** 3
-        + 3 * a * e1 ** 3 * r3 ** 2
-        + 3 * a * e1 ** 2 * e2 * r3 ** 2
-        + 2 * a * e1 ** 2 * r3 ** 2
-        - 3 * a * e1 * e2 ** 2 * r3 ** 2
-        - 2 * a * e1 * r3 ** 2
-        - 3 * a * e2 ** 3 * r3 ** 2
-        - 2 * a * e2 ** 2 * r3 ** 2
-        + 2 * a * e2 * r3 ** 2
-        + 3 * w * wbar * e1 ** 2 * r3 ** 3
-        + 6 * w * wbar * e1 * e2 * r3 ** 3
-        + 3 * w * wbar * e2 ** 2 * r3 ** 3
-        - w * r3bar * e1 ** 2 * r3 ** 3
-        - 2 * w * r3bar * e1 * e2 * r3 ** 3
-        - w * r3bar * e2 ** 2 * r3 ** 3
-        - 3 * w * e1 ** 2 * r3 ** 2
-        - 6 * w * e1 * e2 * r3 ** 2
-        - 3 * w * e2 ** 2 * r3 ** 2
-        - e1 ** 3 * r3 ** 3
-        - 3 * e1 ** 2 * e2 * r3 ** 3
-        + e1 ** 2 * r3 ** 3
-        - 3 * e1 * e2 ** 2 * r3 ** 3
-        + 2 * e1 * e2 * r3 ** 3
-        - e2 ** 3 * r3 ** 3
-        + e2 ** 2 * r3 ** 3
+        - 6 * a * wbar * e1**2 * r3**3
+        + 2 * a * wbar * e1 * r3**3
+        + 6 * a * wbar * e2**2 * r3**3
+        - 2 * a * wbar * e2 * r3**3
+        + a * r3bar * e1**2 * r3**3
+        - a * r3bar * e2**2 * r3**3
+        + 3 * a * e1**3 * r3**2
+        + 3 * a * e1**2 * e2 * r3**2
+        + 2 * a * e1**2 * r3**2
+        - 3 * a * e1 * e2**2 * r3**2
+        - 2 * a * e1 * r3**2
+        - 3 * a * e2**3 * r3**2
+        - 2 * a * e2**2 * r3**2
+        + 2 * a * e2 * r3**2
+        + 3 * w * wbar * e1**2 * r3**3
+        + 6 * w * wbar * e1 * e2 * r3**3
+        + 3 * w * wbar * e2**2 * r3**3
+        - w * r3bar * e1**2 * r3**3
+        - 2 * w * r3bar * e1 * e2 * r3**3
+        - w * r3bar * e2**2 * r3**3
+        - 3 * w * e1**2 * r3**2
+        - 6 * w * e1 * e2 * r3**2
+        - 3 * w * e2**2 * r3**2
+        - e1**3 * r3**3
+        - 3 * e1**2 * e2 * r3**3
+        + e1**2 * r3**3
+        - 3 * e1 * e2**2 * r3**3
+        + 2 * e1 * e2 * r3**3
+        - e2**3 * r3**3
+        + e2**2 * r3**3
     )
 
     p_7 = (
-        -(a ** 8) * w * wbar
-        + a ** 8 * w * r3bar
-        - 3 * a ** 8 * wbar * r3
-        + 3 * a ** 8 * r3bar * r3
-        + a ** 7 * w * e1
-        - a ** 7 * w * e2
-        + a ** 7 * wbar * e1
-        - a ** 7 * wbar * e2
-        - a ** 7 * r3bar * e1
-        + a ** 7 * r3bar * e2
-        + 3 * a ** 7 * e1 * r3
-        - 3 * a ** 7 * e2 * r3
-        + a ** 6 * w * wbar ** 3
-        - a ** 6 * w * wbar ** 2 * r3bar
-        + 9 * a ** 6 * w * wbar * r3 ** 2
-        - 9 * a ** 6 * w * r3bar * r3 ** 2
-        + 3 * a ** 6 * w * e1 * r3
-        + 3 * a ** 6 * w * e2 * r3
-        - 6 * a ** 6 * w * r3
-        + 3 * a ** 6 * wbar ** 3 * r3
-        - 3 * a ** 6 * wbar ** 2 * r3bar * r3
-        + 3 * a ** 6 * wbar ** 2 * e1
-        + 3 * a ** 6 * wbar ** 2 * e2
-        - 2 * a ** 6 * wbar ** 2
-        - 3 * a ** 6 * wbar * r3bar * e1
-        - 3 * a ** 6 * wbar * r3bar * e2
-        + 2 * a ** 6 * wbar * r3bar
-        + 3 * a ** 6 * wbar * r3 ** 3
-        - 3 * a ** 6 * r3bar * r3 ** 3
-        - a ** 6 * e1 ** 2
-        + 2 * a ** 6 * e1 * e2
-        - 9 * a ** 6 * e1 * r3 ** 2
-        - a ** 6 * e2 ** 2
-        - 9 * a ** 6 * e2 * r3 ** 2
-        + 6 * a ** 6 * r3 ** 2
-        - 3 * a ** 5 * w * wbar ** 2 * e1
-        + 3 * a ** 5 * w * wbar ** 2 * e2
-        + 2 * a ** 5 * w * wbar * r3bar * e1
-        - 2 * a ** 5 * w * wbar * r3bar * e2
-        - 6 * a ** 5 * w * e1 * r3 ** 2
-        + 6 * a ** 5 * w * e2 * r3 ** 2
-        - 9 * a ** 5 * wbar ** 2 * e1 * r3
-        + 9 * a ** 5 * wbar ** 2 * e2 * r3
-        + 6 * a ** 5 * wbar * r3bar * e1 * r3
-        - 6 * a ** 5 * wbar * r3bar * e2 * r3
-        - 6 * a ** 5 * wbar * e1 ** 2
-        - 9 * a ** 5 * wbar * e1 * r3 ** 2
-        + 4 * a ** 5 * wbar * e1
-        + 6 * a ** 5 * wbar * e2 ** 2
-        + 9 * a ** 5 * wbar * e2 * r3 ** 2
-        - 4 * a ** 5 * wbar * e2
-        + 3 * a ** 5 * r3bar * e1 ** 2
-        + 9 * a ** 5 * r3bar * e1 * r3 ** 2
-        - 2 * a ** 5 * r3bar * e1
-        - 3 * a ** 5 * r3bar * e2 ** 2
-        - 9 * a ** 5 * r3bar * e2 * r3 ** 2
-        + 2 * a ** 5 * r3bar * e2
-        - 3 * a ** 5 * e1 ** 2 * r3
-        - 2 * a ** 5 * e1 * r3 ** 3
-        + 6 * a ** 5 * e1 * r3
-        + 3 * a ** 5 * e2 ** 2 * r3
-        + 2 * a ** 5 * e2 * r3 ** 3
-        - 6 * a ** 5 * e2 * r3
-        - 9 * a ** 4 * w * wbar ** 3 * r3 ** 2
-        + 9 * a ** 4 * w * wbar ** 2 * r3bar * r3 ** 2
-        - 9 * a ** 4 * w * wbar ** 2 * e1 * r3
-        - 9 * a ** 4 * w * wbar ** 2 * e2 * r3
-        + 18 * a ** 4 * w * wbar ** 2 * r3
-        + 6 * a ** 4 * w * wbar * r3bar * e1 * r3
-        + 6 * a ** 4 * w * wbar * r3bar * e2 * r3
-        - 12 * a ** 4 * w * wbar * r3bar * r3
-        - 12 * a ** 4 * w * wbar * e1 * e2
-        + 12 * a ** 4 * w * wbar * e1
-        + 12 * a ** 4 * w * wbar * e2
-        - 9 * a ** 4 * w * wbar
-        + 4 * a ** 4 * w * r3bar * e1 * e2
-        - 4 * a ** 4 * w * r3bar * e1
-        - 4 * a ** 4 * w * r3bar * e2
-        + 3 * a ** 4 * w * r3bar
-        + 2 * a ** 4 * w * e1 * r3 ** 3
-        + 2 * a ** 4 * w * e2 * r3 ** 3
-        - 3 * a ** 4 * wbar ** 3 * r3 ** 3
-        + 3 * a ** 4 * wbar ** 2 * r3bar * r3 ** 3
-        + 9 * a ** 4 * wbar * r3bar * e1 * r3 ** 2
-        + 9 * a ** 4 * wbar * r3bar * e2 * r3 ** 2
-        - 6 * a ** 4 * wbar * r3bar * r3 ** 2
-        + 12 * a ** 4 * wbar * e1 ** 2 * r3
-        - 12 * a ** 4 * wbar * e1 * e2 * r3
-        + 12 * a ** 4 * wbar * e2 ** 2 * r3
-        + 3 * a ** 4 * wbar * r3
-        - a ** 4 * r3bar * e1 ** 2 * r3
-        + 10 * a ** 4 * r3bar * e1 * e2 * r3
-        - 8 * a ** 4 * r3bar * e1 * r3
-        - a ** 4 * r3bar * e2 ** 2 * r3
-        - 8 * a ** 4 * r3bar * e2 * r3
-        + 3 * a ** 4 * r3bar * r3
-        + 3 * a ** 4 * e1 ** 3
-        - 3 * a ** 4 * e1 ** 2 * e2
-        + 6 * a ** 4 * e1 ** 2 * r3 ** 2
-        - 3 * a ** 4 * e1 * e2 ** 2
-        - 12 * a ** 4 * e1 * e2 * r3 ** 2
-        + 8 * a ** 4 * e1 * e2
-        - 2 * a ** 4 * e1
-        + 3 * a ** 4 * e2 ** 3
-        + 6 * a ** 4 * e2 ** 2 * r3 ** 2
-        - 2 * a ** 4 * e2
-        + 18 * a ** 3 * w * wbar ** 2 * e1 * r3 ** 2
-        - 18 * a ** 3 * w * wbar ** 2 * e2 * r3 ** 2
-        - 12 * a ** 3 * w * wbar * r3bar * e1 * r3 ** 2
-        + 12 * a ** 3 * w * wbar * r3bar * e2 * r3 ** 2
-        + 6 * a ** 3 * w * wbar * e1 ** 2 * r3
-        - 24 * a ** 3 * w * wbar * e1 * r3
-        - 6 * a ** 3 * w * wbar * e2 ** 2 * r3
-        + 24 * a ** 3 * w * wbar * e2 * r3
-        - 2 * a ** 3 * w * r3bar * e1 ** 2 * r3
-        + 8 * a ** 3 * w * r3bar * e1 * r3
-        + 2 * a ** 3 * w * r3bar * e2 ** 2 * r3
-        - 8 * a ** 3 * w * r3bar * e2 * r3
-        - a ** 3 * w * e1 ** 3
-        + 3 * a ** 3 * w * e1 ** 2 * e2
-        - 6 * a ** 3 * w * e1 ** 2
-        - 3 * a ** 3 * w * e1 * e2 ** 2
-        + 6 * a ** 3 * w * e1
-        + a ** 3 * w * e2 ** 3
-        + 6 * a ** 3 * w * e2 ** 2
-        - 6 * a ** 3 * w * e2
-        + 6 * a ** 3 * wbar ** 2 * e1 * r3 ** 3
-        - 6 * a ** 3 * wbar ** 2 * e2 * r3 ** 3
-        - 4 * a ** 3 * wbar * r3bar * e1 * r3 ** 3
-        + 4 * a ** 3 * wbar * r3bar * e2 * r3 ** 3
-        - 6 * a ** 3 * wbar * e1 ** 2 * r3 ** 2
-        + 6 * a ** 3 * wbar * e2 ** 2 * r3 ** 2
-        - 4 * a ** 3 * r3bar * e1 ** 2 * r3 ** 2
-        + 4 * a ** 3 * r3bar * e1 * r3 ** 2
-        + 4 * a ** 3 * r3bar * e2 ** 2 * r3 ** 2
-        - 4 * a ** 3 * r3bar * e2 * r3 ** 2
-        - 9 * a ** 3 * e1 ** 3 * r3
-        + 3 * a ** 3 * e1 ** 2 * e2 * r3
-        - 2 * a ** 3 * e1 ** 2 * r3 ** 3
-        + 2 * a ** 3 * e1 ** 2 * r3
-        - 3 * a ** 3 * e1 * e2 ** 2 * r3
-        - 2 * a ** 3 * e1 * r3
-        + 9 * a ** 3 * e2 ** 3 * r3
-        + 2 * a ** 3 * e2 ** 2 * r3 ** 3
-        - 2 * a ** 3 * e2 ** 2 * r3
-        + 2 * a ** 3 * e2 * r3
-        - 6 * a ** 2 * w * wbar ** 2 * e1 * r3 ** 3
-        - 6 * a ** 2 * w * wbar ** 2 * e2 * r3 ** 3
-        + 4 * a ** 2 * w * wbar * r3bar * e1 * r3 ** 3
-        + 4 * a ** 2 * w * wbar * r3bar * e2 * r3 ** 3
-        - 12 * a ** 2 * w * wbar * e1 ** 2 * r3 ** 2
-        + 12 * a ** 2 * w * wbar * e1 * e2 * r3 ** 2
-        + 12 * a ** 2 * w * wbar * e1 * r3 ** 2
-        - 12 * a ** 2 * w * wbar * e2 ** 2 * r3 ** 2
-        + 12 * a ** 2 * w * wbar * e2 * r3 ** 2
-        + 4 * a ** 2 * w * r3bar * e1 ** 2 * r3 ** 2
-        - 4 * a ** 2 * w * r3bar * e1 * e2 * r3 ** 2
-        - 4 * a ** 2 * w * r3bar * e1 * r3 ** 2
-        + 4 * a ** 2 * w * r3bar * e2 ** 2 * r3 ** 2
-        - 4 * a ** 2 * w * r3bar * e2 * r3 ** 2
-        + 3 * a ** 2 * w * e1 ** 3 * r3
-        - 3 * a ** 2 * w * e1 ** 2 * e2 * r3
-        + 12 * a ** 2 * w * e1 ** 2 * r3
-        - 3 * a ** 2 * w * e1 * e2 ** 2 * r3
-        - 6 * a ** 2 * w * e1 * r3
-        + 3 * a ** 2 * w * e2 ** 3 * r3
-        + 12 * a ** 2 * w * e2 ** 2 * r3
-        - 6 * a ** 2 * w * e2 * r3
-        + 12 * a ** 2 * wbar * e1 * e2 * r3 ** 3
-        - 4 * a ** 2 * wbar * e1 * r3 ** 3
-        - 4 * a ** 2 * wbar * e2 * r3 ** 3
-        + 2 * a ** 2 * r3bar * e1 ** 2 * r3 ** 3
-        + 2 * a ** 2 * r3bar * e2 ** 2 * r3 ** 3
-        + 9 * a ** 2 * e1 ** 3 * r3 ** 2
-        + 3 * a ** 2 * e1 ** 2 * e2 * r3 ** 2
-        - 4 * a ** 2 * e1 ** 2 * r3 ** 2
-        + 3 * a ** 2 * e1 * e2 ** 2 * r3 ** 2
-        - 8 * a ** 2 * e1 * e2 * r3 ** 2
-        + 4 * a ** 2 * e1 * r3 ** 2
-        + 9 * a ** 2 * e2 ** 3 * r3 ** 2
-        - 4 * a ** 2 * e2 ** 2 * r3 ** 2
-        + 4 * a ** 2 * e2 * r3 ** 2
-        + 6 * a * w * wbar * e1 ** 2 * r3 ** 3
-        - 6 * a * w * wbar * e2 ** 2 * r3 ** 3
-        - 2 * a * w * r3bar * e1 ** 2 * r3 ** 3
-        + 2 * a * w * r3bar * e2 ** 2 * r3 ** 3
-        - 3 * a * w * e1 ** 3 * r3 ** 2
-        - 3 * a * w * e1 ** 2 * e2 * r3 ** 2
-        - 6 * a * w * e1 ** 2 * r3 ** 2
-        + 3 * a * w * e1 * e2 ** 2 * r3 ** 2
-        + 3 * a * w * e2 ** 3 * r3 ** 2
-        + 6 * a * w * e2 ** 2 * r3 ** 2
-        - 3 * a * e1 ** 3 * r3 ** 3
-        - 3 * a * e1 ** 2 * e2 * r3 ** 3
-        + 2 * a * e1 ** 2 * r3 ** 3
-        + 3 * a * e1 * e2 ** 2 * r3 ** 3
-        + 3 * a * e2 ** 3 * r3 ** 3
-        - 2 * a * e2 ** 2 * r3 ** 3
-        + w * e1 ** 3 * r3 ** 3
-        + 3 * w * e1 ** 2 * e2 * r3 ** 3
-        + 3 * w * e1 * e2 ** 2 * r3 ** 3
-        + w * e2 ** 3 * r3 ** 3
+        -(a**8) * w * wbar
+        + a**8 * w * r3bar
+        - 3 * a**8 * wbar * r3
+        + 3 * a**8 * r3bar * r3
+        + a**7 * w * e1
+        - a**7 * w * e2
+        + a**7 * wbar * e1
+        - a**7 * wbar * e2
+        - a**7 * r3bar * e1
+        + a**7 * r3bar * e2
+        + 3 * a**7 * e1 * r3
+        - 3 * a**7 * e2 * r3
+        + a**6 * w * wbar**3
+        - a**6 * w * wbar**2 * r3bar
+        + 9 * a**6 * w * wbar * r3**2
+        - 9 * a**6 * w * r3bar * r3**2
+        + 3 * a**6 * w * e1 * r3
+        + 3 * a**6 * w * e2 * r3
+        - 6 * a**6 * w * r3
+        + 3 * a**6 * wbar**3 * r3
+        - 3 * a**6 * wbar**2 * r3bar * r3
+        + 3 * a**6 * wbar**2 * e1
+        + 3 * a**6 * wbar**2 * e2
+        - 2 * a**6 * wbar**2
+        - 3 * a**6 * wbar * r3bar * e1
+        - 3 * a**6 * wbar * r3bar * e2
+        + 2 * a**6 * wbar * r3bar
+        + 3 * a**6 * wbar * r3**3
+        - 3 * a**6 * r3bar * r3**3
+        - a**6 * e1**2
+        + 2 * a**6 * e1 * e2
+        - 9 * a**6 * e1 * r3**2
+        - a**6 * e2**2
+        - 9 * a**6 * e2 * r3**2
+        + 6 * a**6 * r3**2
+        - 3 * a**5 * w * wbar**2 * e1
+        + 3 * a**5 * w * wbar**2 * e2
+        + 2 * a**5 * w * wbar * r3bar * e1
+        - 2 * a**5 * w * wbar * r3bar * e2
+        - 6 * a**5 * w * e1 * r3**2
+        + 6 * a**5 * w * e2 * r3**2
+        - 9 * a**5 * wbar**2 * e1 * r3
+        + 9 * a**5 * wbar**2 * e2 * r3
+        + 6 * a**5 * wbar * r3bar * e1 * r3
+        - 6 * a**5 * wbar * r3bar * e2 * r3
+        - 6 * a**5 * wbar * e1**2
+        - 9 * a**5 * wbar * e1 * r3**2
+        + 4 * a**5 * wbar * e1
+        + 6 * a**5 * wbar * e2**2
+        + 9 * a**5 * wbar * e2 * r3**2
+        - 4 * a**5 * wbar * e2
+        + 3 * a**5 * r3bar * e1**2
+        + 9 * a**5 * r3bar * e1 * r3**2
+        - 2 * a**5 * r3bar * e1
+        - 3 * a**5 * r3bar * e2**2
+        - 9 * a**5 * r3bar * e2 * r3**2
+        + 2 * a**5 * r3bar * e2
+        - 3 * a**5 * e1**2 * r3
+        - 2 * a**5 * e1 * r3**3
+        + 6 * a**5 * e1 * r3
+        + 3 * a**5 * e2**2 * r3
+        + 2 * a**5 * e2 * r3**3
+        - 6 * a**5 * e2 * r3
+        - 9 * a**4 * w * wbar**3 * r3**2
+        + 9 * a**4 * w * wbar**2 * r3bar * r3**2
+        - 9 * a**4 * w * wbar**2 * e1 * r3
+        - 9 * a**4 * w * wbar**2 * e2 * r3
+        + 18 * a**4 * w * wbar**2 * r3
+        + 6 * a**4 * w * wbar * r3bar * e1 * r3
+        + 6 * a**4 * w * wbar * r3bar * e2 * r3
+        - 12 * a**4 * w * wbar * r3bar * r3
+        - 12 * a**4 * w * wbar * e1 * e2
+        + 12 * a**4 * w * wbar * e1
+        + 12 * a**4 * w * wbar * e2
+        - 9 * a**4 * w * wbar
+        + 4 * a**4 * w * r3bar * e1 * e2
+        - 4 * a**4 * w * r3bar * e1
+        - 4 * a**4 * w * r3bar * e2
+        + 3 * a**4 * w * r3bar
+        + 2 * a**4 * w * e1 * r3**3
+        + 2 * a**4 * w * e2 * r3**3
+        - 3 * a**4 * wbar**3 * r3**3
+        + 3 * a**4 * wbar**2 * r3bar * r3**3
+        + 9 * a**4 * wbar * r3bar * e1 * r3**2
+        + 9 * a**4 * wbar * r3bar * e2 * r3**2
+        - 6 * a**4 * wbar * r3bar * r3**2
+        + 12 * a**4 * wbar * e1**2 * r3
+        - 12 * a**4 * wbar * e1 * e2 * r3
+        + 12 * a**4 * wbar * e2**2 * r3
+        + 3 * a**4 * wbar * r3
+        - a**4 * r3bar * e1**2 * r3
+        + 10 * a**4 * r3bar * e1 * e2 * r3
+        - 8 * a**4 * r3bar * e1 * r3
+        - a**4 * r3bar * e2**2 * r3
+        - 8 * a**4 * r3bar * e2 * r3
+        + 3 * a**4 * r3bar * r3
+        + 3 * a**4 * e1**3
+        - 3 * a**4 * e1**2 * e2
+        + 6 * a**4 * e1**2 * r3**2
+        - 3 * a**4 * e1 * e2**2
+        - 12 * a**4 * e1 * e2 * r3**2
+        + 8 * a**4 * e1 * e2
+        - 2 * a**4 * e1
+        + 3 * a**4 * e2**3
+        + 6 * a**4 * e2**2 * r3**2
+        - 2 * a**4 * e2
+        + 18 * a**3 * w * wbar**2 * e1 * r3**2
+        - 18 * a**3 * w * wbar**2 * e2 * r3**2
+        - 12 * a**3 * w * wbar * r3bar * e1 * r3**2
+        + 12 * a**3 * w * wbar * r3bar * e2 * r3**2
+        + 6 * a**3 * w * wbar * e1**2 * r3
+        - 24 * a**3 * w * wbar * e1 * r3
+        - 6 * a**3 * w * wbar * e2**2 * r3
+        + 24 * a**3 * w * wbar * e2 * r3
+        - 2 * a**3 * w * r3bar * e1**2 * r3
+        + 8 * a**3 * w * r3bar * e1 * r3
+        + 2 * a**3 * w * r3bar * e2**2 * r3
+        - 8 * a**3 * w * r3bar * e2 * r3
+        - a**3 * w * e1**3
+        + 3 * a**3 * w * e1**2 * e2
+        - 6 * a**3 * w * e1**2
+        - 3 * a**3 * w * e1 * e2**2
+        + 6 * a**3 * w * e1
+        + a**3 * w * e2**3
+        + 6 * a**3 * w * e2**2
+        - 6 * a**3 * w * e2
+        + 6 * a**3 * wbar**2 * e1 * r3**3
+        - 6 * a**3 * wbar**2 * e2 * r3**3
+        - 4 * a**3 * wbar * r3bar * e1 * r3**3
+        + 4 * a**3 * wbar * r3bar * e2 * r3**3
+        - 6 * a**3 * wbar * e1**2 * r3**2
+        + 6 * a**3 * wbar * e2**2 * r3**2
+        - 4 * a**3 * r3bar * e1**2 * r3**2
+        + 4 * a**3 * r3bar * e1 * r3**2
+        + 4 * a**3 * r3bar * e2**2 * r3**2
+        - 4 * a**3 * r3bar * e2 * r3**2
+        - 9 * a**3 * e1**3 * r3
+        + 3 * a**3 * e1**2 * e2 * r3
+        - 2 * a**3 * e1**2 * r3**3
+        + 2 * a**3 * e1**2 * r3
+        - 3 * a**3 * e1 * e2**2 * r3
+        - 2 * a**3 * e1 * r3
+        + 9 * a**3 * e2**3 * r3
+        + 2 * a**3 * e2**2 * r3**3
+        - 2 * a**3 * e2**2 * r3
+        + 2 * a**3 * e2 * r3
+        - 6 * a**2 * w * wbar**2 * e1 * r3**3
+        - 6 * a**2 * w * wbar**2 * e2 * r3**3
+        + 4 * a**2 * w * wbar * r3bar * e1 * r3**3
+        + 4 * a**2 * w * wbar * r3bar * e2 * r3**3
+        - 12 * a**2 * w * wbar * e1**2 * r3**2
+        + 12 * a**2 * w * wbar * e1 * e2 * r3**2
+        + 12 * a**2 * w * wbar * e1 * r3**2
+        - 12 * a**2 * w * wbar * e2**2 * r3**2
+        + 12 * a**2 * w * wbar * e2 * r3**2
+        + 4 * a**2 * w * r3bar * e1**2 * r3**2
+        - 4 * a**2 * w * r3bar * e1 * e2 * r3**2
+        - 4 * a**2 * w * r3bar * e1 * r3**2
+        + 4 * a**2 * w * r3bar * e2**2 * r3**2
+        - 4 * a**2 * w * r3bar * e2 * r3**2
+        + 3 * a**2 * w * e1**3 * r3
+        - 3 * a**2 * w * e1**2 * e2 * r3
+        + 12 * a**2 * w * e1**2 * r3
+        - 3 * a**2 * w * e1 * e2**2 * r3
+        - 6 * a**2 * w * e1 * r3
+        + 3 * a**2 * w * e2**3 * r3
+        + 12 * a**2 * w * e2**2 * r3
+        - 6 * a**2 * w * e2 * r3
+        + 12 * a**2 * wbar * e1 * e2 * r3**3
+        - 4 * a**2 * wbar * e1 * r3**3
+        - 4 * a**2 * wbar * e2 * r3**3
+        + 2 * a**2 * r3bar * e1**2 * r3**3
+        + 2 * a**2 * r3bar * e2**2 * r3**3
+        + 9 * a**2 * e1**3 * r3**2
+        + 3 * a**2 * e1**2 * e2 * r3**2
+        - 4 * a**2 * e1**2 * r3**2
+        + 3 * a**2 * e1 * e2**2 * r3**2
+        - 8 * a**2 * e1 * e2 * r3**2
+        + 4 * a**2 * e1 * r3**2
+        + 9 * a**2 * e2**3 * r3**2
+        - 4 * a**2 * e2**2 * r3**2
+        + 4 * a**2 * e2 * r3**2
+        + 6 * a * w * wbar * e1**2 * r3**3
+        - 6 * a * w * wbar * e2**2 * r3**3
+        - 2 * a * w * r3bar * e1**2 * r3**3
+        + 2 * a * w * r3bar * e2**2 * r3**3
+        - 3 * a * w * e1**3 * r3**2
+        - 3 * a * w * e1**2 * e2 * r3**2
+        - 6 * a * w * e1**2 * r3**2
+        + 3 * a * w * e1 * e2**2 * r3**2
+        + 3 * a * w * e2**3 * r3**2
+        + 6 * a * w * e2**2 * r3**2
+        - 3 * a * e1**3 * r3**3
+        - 3 * a * e1**2 * e2 * r3**3
+        + 2 * a * e1**2 * r3**3
+        + 3 * a * e1 * e2**2 * r3**3
+        + 3 * a * e2**3 * r3**3
+        - 2 * a * e2**2 * r3**3
+        + w * e1**3 * r3**3
+        + 3 * w * e1**2 * e2 * r3**3
+        + 3 * w * e1 * e2**2 * r3**3
+        + w * e2**3 * r3**3
     )
 
     p_8 = (
-        3 * a ** 8 * w * wbar * r3
-        - 3 * a ** 8 * w * r3bar * r3
-        + a ** 8 * w * e1
-        + a ** 8 * w * e2
-        - a ** 8 * w
-        + 3 * a ** 8 * wbar * r3 ** 2
-        - 3 * a ** 8 * r3bar * r3 ** 2
-        - a ** 8 * e1 * r3
-        - a ** 8 * e2 * r3
-        + a ** 8 * r3
-        - 3 * a ** 7 * w * e1 * r3
-        + 3 * a ** 7 * w * e2 * r3
-        - 3 * a ** 7 * wbar * e1 * r3
-        + 3 * a ** 7 * wbar * e2 * r3
-        + 3 * a ** 7 * r3bar * e1 * r3
-        - 3 * a ** 7 * r3bar * e2 * r3
-        - a ** 7 * e1 ** 2
-        - 3 * a ** 7 * e1 * r3 ** 2
-        + a ** 7 * e1
-        + a ** 7 * e2 ** 2
-        + 3 * a ** 7 * e2 * r3 ** 2
-        - a ** 7 * e2
-        - 3 * a ** 6 * w * wbar ** 3 * r3
-        + 3 * a ** 6 * w * wbar ** 2 * r3bar * r3
-        - 3 * a ** 6 * w * wbar ** 2 * e1
-        - 3 * a ** 6 * w * wbar ** 2 * e2
-        + 3 * a ** 6 * w * wbar ** 2
-        + 2 * a ** 6 * w * wbar * r3bar * e1
-        + 2 * a ** 6 * w * wbar * r3bar * e2
-        - 2 * a ** 6 * w * wbar * r3bar
-        - 3 * a ** 6 * w * wbar * r3 ** 3
-        + 3 * a ** 6 * w * r3bar * r3 ** 3
-        + 3 * a ** 6 * w * r3 ** 2
-        - 3 * a ** 6 * wbar ** 3 * r3 ** 2
-        + 3 * a ** 6 * wbar ** 2 * r3bar * r3 ** 2
-        - 6 * a ** 6 * wbar ** 2 * e1 * r3
-        - 6 * a ** 6 * wbar ** 2 * e2 * r3
-        + 3 * a ** 6 * wbar ** 2 * r3
-        + 7 * a ** 6 * wbar * r3bar * e1 * r3
-        + 7 * a ** 6 * wbar * r3bar * e2 * r3
-        - 4 * a ** 6 * wbar * r3bar * r3
-        - 3 * a ** 6 * wbar * e1 ** 2
-        - 6 * a ** 6 * wbar * e1 * e2
-        + 4 * a ** 6 * wbar * e1
-        - 3 * a ** 6 * wbar * e2 ** 2
-        + 4 * a ** 6 * wbar * e2
-        - a ** 6 * wbar
-        + 2 * a ** 6 * r3bar * e1 ** 2
-        + 4 * a ** 6 * r3bar * e1 * e2
-        - 3 * a ** 6 * r3bar * e1
-        + 2 * a ** 6 * r3bar * e2 ** 2
-        - 3 * a ** 6 * r3bar * e2
-        + a ** 6 * r3bar
-        + 3 * a ** 6 * e1 ** 2 * r3
-        - 6 * a ** 6 * e1 * e2 * r3
-        + 4 * a ** 6 * e1 * r3 ** 3
-        + 3 * a ** 6 * e2 ** 2 * r3
-        + 4 * a ** 6 * e2 * r3 ** 3
-        - 3 * a ** 6 * r3 ** 3
-        + 9 * a ** 5 * w * wbar ** 2 * e1 * r3
-        - 9 * a ** 5 * w * wbar ** 2 * e2 * r3
-        - 6 * a ** 5 * w * wbar * r3bar * e1 * r3
-        + 6 * a ** 5 * w * wbar * r3bar * e2 * r3
-        + 6 * a ** 5 * w * wbar * e1 ** 2
-        - 6 * a ** 5 * w * wbar * e1
-        - 6 * a ** 5 * w * wbar * e2 ** 2
-        + 6 * a ** 5 * w * wbar * e2
-        - 2 * a ** 5 * w * r3bar * e1 ** 2
-        + 2 * a ** 5 * w * r3bar * e1
-        + 2 * a ** 5 * w * r3bar * e2 ** 2
-        - 2 * a ** 5 * w * r3bar * e2
-        + 2 * a ** 5 * w * e1 * r3 ** 3
-        - 2 * a ** 5 * w * e2 * r3 ** 3
-        + 9 * a ** 5 * wbar ** 2 * e1 * r3 ** 2
-        - 9 * a ** 5 * wbar ** 2 * e2 * r3 ** 2
-        - 6 * a ** 5 * wbar * r3bar * e1 * r3 ** 2
-        + 6 * a ** 5 * wbar * r3bar * e2 * r3 ** 2
-        + 12 * a ** 5 * wbar * e1 ** 2 * r3
-        + 3 * a ** 5 * wbar * e1 * r3 ** 3
-        - 6 * a ** 5 * wbar * e1 * r3
-        - 12 * a ** 5 * wbar * e2 ** 2 * r3
-        - 3 * a ** 5 * wbar * e2 * r3 ** 3
-        + 6 * a ** 5 * wbar * e2 * r3
-        - 7 * a ** 5 * r3bar * e1 ** 2 * r3
-        - 3 * a ** 5 * r3bar * e1 * r3 ** 3
-        + 4 * a ** 5 * r3bar * e1 * r3
-        + 7 * a ** 5 * r3bar * e2 ** 2 * r3
-        + 3 * a ** 5 * r3bar * e2 * r3 ** 3
-        - 4 * a ** 5 * r3bar * e2 * r3
-        + 3 * a ** 5 * e1 ** 3
-        + 3 * a ** 5 * e1 ** 2 * e2
-        - 4 * a ** 5 * e1 ** 2
-        - 3 * a ** 5 * e1 * e2 ** 2
-        - 3 * a ** 5 * e1 * r3 ** 2
-        + a ** 5 * e1
-        - 3 * a ** 5 * e2 ** 3
-        + 4 * a ** 5 * e2 ** 2
-        + 3 * a ** 5 * e2 * r3 ** 2
-        - a ** 5 * e2
-        + 3 * a ** 4 * w * wbar ** 3 * r3 ** 3
-        - 3 * a ** 4 * w * wbar ** 2 * r3bar * r3 ** 3
-        - 9 * a ** 4 * w * wbar ** 2 * r3 ** 2
-        + 6 * a ** 4 * w * wbar * r3bar * r3 ** 2
-        - 12 * a ** 4 * w * wbar * e1 ** 2 * r3
-        + 12 * a ** 4 * w * wbar * e1 * e2 * r3
-        - 6 * a ** 4 * w * wbar * e1 * r3
-        - 12 * a ** 4 * w * wbar * e2 ** 2 * r3
-        - 6 * a ** 4 * w * wbar * e2 * r3
-        + 9 * a ** 4 * w * wbar * r3
-        + 4 * a ** 4 * w * r3bar * e1 ** 2 * r3
-        - 4 * a ** 4 * w * r3bar * e1 * e2 * r3
-        + 2 * a ** 4 * w * r3bar * e1 * r3
-        + 4 * a ** 4 * w * r3bar * e2 ** 2 * r3
-        + 2 * a ** 4 * w * r3bar * e2 * r3
-        - 3 * a ** 4 * w * r3bar * r3
-        - 3 * a ** 4 * w * e1 ** 3
-        + 3 * a ** 4 * w * e1 ** 2 * e2
-        + 3 * a ** 4 * w * e1 * e2 ** 2
-        - 12 * a ** 4 * w * e1 * e2
-        + 6 * a ** 4 * w * e1
-        - 3 * a ** 4 * w * e2 ** 3
-        + 6 * a ** 4 * w * e2
-        - 3 * a ** 4 * w
-        - 3 * a ** 4 * wbar ** 2 * e1 * r3 ** 3
-        - 3 * a ** 4 * wbar ** 2 * e2 * r3 ** 3
-        + 3 * a ** 4 * wbar ** 2 * r3 ** 3
-        - a ** 4 * wbar * r3bar * e1 * r3 ** 3
-        - a ** 4 * wbar * r3bar * e2 * r3 ** 3
-        - 15 * a ** 4 * wbar * e1 ** 2 * r3 ** 2
-        + 6 * a ** 4 * wbar * e1 * e2 * r3 ** 2
-        + 6 * a ** 4 * wbar * e1 * r3 ** 2
-        - 15 * a ** 4 * wbar * e2 ** 2 * r3 ** 2
-        + 6 * a ** 4 * wbar * e2 * r3 ** 2
-        - 6 * a ** 4 * wbar * r3 ** 2
-        + 5 * a ** 4 * r3bar * e1 ** 2 * r3 ** 2
-        - 2 * a ** 4 * r3bar * e1 * e2 * r3 ** 2
-        + a ** 4 * r3bar * e1 * r3 ** 2
-        + 5 * a ** 4 * r3bar * e2 ** 2 * r3 ** 2
-        + a ** 4 * r3bar * e2 * r3 ** 2
-        - 9 * a ** 4 * e1 ** 3 * r3
-        - 3 * a ** 4 * e1 ** 2 * e2 * r3
-        - 2 * a ** 4 * e1 ** 2 * r3 ** 3
-        + 8 * a ** 4 * e1 ** 2 * r3
-        - 3 * a ** 4 * e1 * e2 ** 2 * r3
-        + 4 * a ** 4 * e1 * e2 * r3 ** 3
-        + 4 * a ** 4 * e1 * e2 * r3
-        - 5 * a ** 4 * e1 * r3
-        - 9 * a ** 4 * e2 ** 3 * r3
-        - 2 * a ** 4 * e2 ** 2 * r3 ** 3
-        + 8 * a ** 4 * e2 ** 2 * r3
-        - 5 * a ** 4 * e2 * r3
-        + 3 * a ** 4 * r3
-        - 6 * a ** 3 * w * wbar ** 2 * e1 * r3 ** 3
-        + 6 * a ** 3 * w * wbar ** 2 * e2 * r3 ** 3
-        + 4 * a ** 3 * w * wbar * r3bar * e1 * r3 ** 3
-        - 4 * a ** 3 * w * wbar * r3bar * e2 * r3 ** 3
-        + 6 * a ** 3 * w * wbar * e1 ** 2 * r3 ** 2
-        + 12 * a ** 3 * w * wbar * e1 * r3 ** 2
-        - 6 * a ** 3 * w * wbar * e2 ** 2 * r3 ** 2
-        - 12 * a ** 3 * w * wbar * e2 * r3 ** 2
-        - 2 * a ** 3 * w * r3bar * e1 ** 2 * r3 ** 2
-        - 4 * a ** 3 * w * r3bar * e1 * r3 ** 2
-        + 2 * a ** 3 * w * r3bar * e2 ** 2 * r3 ** 2
-        + 4 * a ** 3 * w * r3bar * e2 * r3 ** 2
-        + 9 * a ** 3 * w * e1 ** 3 * r3
-        - 3 * a ** 3 * w * e1 ** 2 * e2 * r3
-        + 3 * a ** 3 * w * e1 * e2 ** 2 * r3
-        - 6 * a ** 3 * w * e1 * r3
-        - 9 * a ** 3 * w * e2 ** 3 * r3
-        + 6 * a ** 3 * w * e2 * r3
-        + 6 * a ** 3 * wbar * e1 ** 2 * r3 ** 3
-        - 4 * a ** 3 * wbar * e1 * r3 ** 3
-        - 6 * a ** 3 * wbar * e2 ** 2 * r3 ** 3
-        + 4 * a ** 3 * wbar * e2 * r3 ** 3
-        + 9 * a ** 3 * e1 ** 3 * r3 ** 2
-        - 3 * a ** 3 * e1 ** 2 * e2 * r3 ** 2
-        - 4 * a ** 3 * e1 ** 2 * r3 ** 2
-        + 3 * a ** 3 * e1 * e2 ** 2 * r3 ** 2
-        + 4 * a ** 3 * e1 * r3 ** 2
-        - 9 * a ** 3 * e2 ** 3 * r3 ** 2
-        + 4 * a ** 3 * e2 ** 2 * r3 ** 2
-        - 4 * a ** 3 * e2 * r3 ** 2
-        - 12 * a ** 2 * w * wbar * e1 * e2 * r3 ** 3
-        + 4 * a ** 2 * w * r3bar * e1 * e2 * r3 ** 3
-        - 9 * a ** 2 * w * e1 ** 3 * r3 ** 2
-        - 3 * a ** 2 * w * e1 ** 2 * e2 * r3 ** 2
-        - 3 * a ** 2 * w * e1 * e2 ** 2 * r3 ** 2
-        + 12 * a ** 2 * w * e1 * e2 * r3 ** 2
-        - 9 * a ** 2 * w * e2 ** 3 * r3 ** 2
-        - 3 * a ** 2 * e1 ** 3 * r3 ** 3
-        + 3 * a ** 2 * e1 ** 2 * e2 * r3 ** 3
-        + 3 * a ** 2 * e1 * e2 ** 2 * r3 ** 3
-        - 4 * a ** 2 * e1 * e2 * r3 ** 3
-        - 3 * a ** 2 * e2 ** 3 * r3 ** 3
-        + 3 * a * w * e1 ** 3 * r3 ** 3
-        + 3 * a * w * e1 ** 2 * e2 * r3 ** 3
-        - 3 * a * w * e1 * e2 ** 2 * r3 ** 3
-        - 3 * a * w * e2 ** 3 * r3 ** 3
+        3 * a**8 * w * wbar * r3
+        - 3 * a**8 * w * r3bar * r3
+        + a**8 * w * e1
+        + a**8 * w * e2
+        - a**8 * w
+        + 3 * a**8 * wbar * r3**2
+        - 3 * a**8 * r3bar * r3**2
+        - a**8 * e1 * r3
+        - a**8 * e2 * r3
+        + a**8 * r3
+        - 3 * a**7 * w * e1 * r3
+        + 3 * a**7 * w * e2 * r3
+        - 3 * a**7 * wbar * e1 * r3
+        + 3 * a**7 * wbar * e2 * r3
+        + 3 * a**7 * r3bar * e1 * r3
+        - 3 * a**7 * r3bar * e2 * r3
+        - a**7 * e1**2
+        - 3 * a**7 * e1 * r3**2
+        + a**7 * e1
+        + a**7 * e2**2
+        + 3 * a**7 * e2 * r3**2
+        - a**7 * e2
+        - 3 * a**6 * w * wbar**3 * r3
+        + 3 * a**6 * w * wbar**2 * r3bar * r3
+        - 3 * a**6 * w * wbar**2 * e1
+        - 3 * a**6 * w * wbar**2 * e2
+        + 3 * a**6 * w * wbar**2
+        + 2 * a**6 * w * wbar * r3bar * e1
+        + 2 * a**6 * w * wbar * r3bar * e2
+        - 2 * a**6 * w * wbar * r3bar
+        - 3 * a**6 * w * wbar * r3**3
+        + 3 * a**6 * w * r3bar * r3**3
+        + 3 * a**6 * w * r3**2
+        - 3 * a**6 * wbar**3 * r3**2
+        + 3 * a**6 * wbar**2 * r3bar * r3**2
+        - 6 * a**6 * wbar**2 * e1 * r3
+        - 6 * a**6 * wbar**2 * e2 * r3
+        + 3 * a**6 * wbar**2 * r3
+        + 7 * a**6 * wbar * r3bar * e1 * r3
+        + 7 * a**6 * wbar * r3bar * e2 * r3
+        - 4 * a**6 * wbar * r3bar * r3
+        - 3 * a**6 * wbar * e1**2
+        - 6 * a**6 * wbar * e1 * e2
+        + 4 * a**6 * wbar * e1
+        - 3 * a**6 * wbar * e2**2
+        + 4 * a**6 * wbar * e2
+        - a**6 * wbar
+        + 2 * a**6 * r3bar * e1**2
+        + 4 * a**6 * r3bar * e1 * e2
+        - 3 * a**6 * r3bar * e1
+        + 2 * a**6 * r3bar * e2**2
+        - 3 * a**6 * r3bar * e2
+        + a**6 * r3bar
+        + 3 * a**6 * e1**2 * r3
+        - 6 * a**6 * e1 * e2 * r3
+        + 4 * a**6 * e1 * r3**3
+        + 3 * a**6 * e2**2 * r3
+        + 4 * a**6 * e2 * r3**3
+        - 3 * a**6 * r3**3
+        + 9 * a**5 * w * wbar**2 * e1 * r3
+        - 9 * a**5 * w * wbar**2 * e2 * r3
+        - 6 * a**5 * w * wbar * r3bar * e1 * r3
+        + 6 * a**5 * w * wbar * r3bar * e2 * r3
+        + 6 * a**5 * w * wbar * e1**2
+        - 6 * a**5 * w * wbar * e1
+        - 6 * a**5 * w * wbar * e2**2
+        + 6 * a**5 * w * wbar * e2
+        - 2 * a**5 * w * r3bar * e1**2
+        + 2 * a**5 * w * r3bar * e1
+        + 2 * a**5 * w * r3bar * e2**2
+        - 2 * a**5 * w * r3bar * e2
+        + 2 * a**5 * w * e1 * r3**3
+        - 2 * a**5 * w * e2 * r3**3
+        + 9 * a**5 * wbar**2 * e1 * r3**2
+        - 9 * a**5 * wbar**2 * e2 * r3**2
+        - 6 * a**5 * wbar * r3bar * e1 * r3**2
+        + 6 * a**5 * wbar * r3bar * e2 * r3**2
+        + 12 * a**5 * wbar * e1**2 * r3
+        + 3 * a**5 * wbar * e1 * r3**3
+        - 6 * a**5 * wbar * e1 * r3
+        - 12 * a**5 * wbar * e2**2 * r3
+        - 3 * a**5 * wbar * e2 * r3**3
+        + 6 * a**5 * wbar * e2 * r3
+        - 7 * a**5 * r3bar * e1**2 * r3
+        - 3 * a**5 * r3bar * e1 * r3**3
+        + 4 * a**5 * r3bar * e1 * r3
+        + 7 * a**5 * r3bar * e2**2 * r3
+        + 3 * a**5 * r3bar * e2 * r3**3
+        - 4 * a**5 * r3bar * e2 * r3
+        + 3 * a**5 * e1**3
+        + 3 * a**5 * e1**2 * e2
+        - 4 * a**5 * e1**2
+        - 3 * a**5 * e1 * e2**2
+        - 3 * a**5 * e1 * r3**2
+        + a**5 * e1
+        - 3 * a**5 * e2**3
+        + 4 * a**5 * e2**2
+        + 3 * a**5 * e2 * r3**2
+        - a**5 * e2
+        + 3 * a**4 * w * wbar**3 * r3**3
+        - 3 * a**4 * w * wbar**2 * r3bar * r3**3
+        - 9 * a**4 * w * wbar**2 * r3**2
+        + 6 * a**4 * w * wbar * r3bar * r3**2
+        - 12 * a**4 * w * wbar * e1**2 * r3
+        + 12 * a**4 * w * wbar * e1 * e2 * r3
+        - 6 * a**4 * w * wbar * e1 * r3
+        - 12 * a**4 * w * wbar * e2**2 * r3
+        - 6 * a**4 * w * wbar * e2 * r3
+        + 9 * a**4 * w * wbar * r3
+        + 4 * a**4 * w * r3bar * e1**2 * r3
+        - 4 * a**4 * w * r3bar * e1 * e2 * r3
+        + 2 * a**4 * w * r3bar * e1 * r3
+        + 4 * a**4 * w * r3bar * e2**2 * r3
+        + 2 * a**4 * w * r3bar * e2 * r3
+        - 3 * a**4 * w * r3bar * r3
+        - 3 * a**4 * w * e1**3
+        + 3 * a**4 * w * e1**2 * e2
+        + 3 * a**4 * w * e1 * e2**2
+        - 12 * a**4 * w * e1 * e2
+        + 6 * a**4 * w * e1
+        - 3 * a**4 * w * e2**3
+        + 6 * a**4 * w * e2
+        - 3 * a**4 * w
+        - 3 * a**4 * wbar**2 * e1 * r3**3
+        - 3 * a**4 * wbar**2 * e2 * r3**3
+        + 3 * a**4 * wbar**2 * r3**3
+        - a**4 * wbar * r3bar * e1 * r3**3
+        - a**4 * wbar * r3bar * e2 * r3**3
+        - 15 * a**4 * wbar * e1**2 * r3**2
+        + 6 * a**4 * wbar * e1 * e2 * r3**2
+        + 6 * a**4 * wbar * e1 * r3**2
+        - 15 * a**4 * wbar * e2**2 * r3**2
+        + 6 * a**4 * wbar * e2 * r3**2
+        - 6 * a**4 * wbar * r3**2
+        + 5 * a**4 * r3bar * e1**2 * r3**2
+        - 2 * a**4 * r3bar * e1 * e2 * r3**2
+        + a**4 * r3bar * e1 * r3**2
+        + 5 * a**4 * r3bar * e2**2 * r3**2
+        + a**4 * r3bar * e2 * r3**2
+        - 9 * a**4 * e1**3 * r3
+        - 3 * a**4 * e1**2 * e2 * r3
+        - 2 * a**4 * e1**2 * r3**3
+        + 8 * a**4 * e1**2 * r3
+        - 3 * a**4 * e1 * e2**2 * r3
+        + 4 * a**4 * e1 * e2 * r3**3
+        + 4 * a**4 * e1 * e2 * r3
+        - 5 * a**4 * e1 * r3
+        - 9 * a**4 * e2**3 * r3
+        - 2 * a**4 * e2**2 * r3**3
+        + 8 * a**4 * e2**2 * r3
+        - 5 * a**4 * e2 * r3
+        + 3 * a**4 * r3
+        - 6 * a**3 * w * wbar**2 * e1 * r3**3
+        + 6 * a**3 * w * wbar**2 * e2 * r3**3
+        + 4 * a**3 * w * wbar * r3bar * e1 * r3**3
+        - 4 * a**3 * w * wbar * r3bar * e2 * r3**3
+        + 6 * a**3 * w * wbar * e1**2 * r3**2
+        + 12 * a**3 * w * wbar * e1 * r3**2
+        - 6 * a**3 * w * wbar * e2**2 * r3**2
+        - 12 * a**3 * w * wbar * e2 * r3**2
+        - 2 * a**3 * w * r3bar * e1**2 * r3**2
+        - 4 * a**3 * w * r3bar * e1 * r3**2
+        + 2 * a**3 * w * r3bar * e2**2 * r3**2
+        + 4 * a**3 * w * r3bar * e2 * r3**2
+        + 9 * a**3 * w * e1**3 * r3
+        - 3 * a**3 * w * e1**2 * e2 * r3
+        + 3 * a**3 * w * e1 * e2**2 * r3
+        - 6 * a**3 * w * e1 * r3
+        - 9 * a**3 * w * e2**3 * r3
+        + 6 * a**3 * w * e2 * r3
+        + 6 * a**3 * wbar * e1**2 * r3**3
+        - 4 * a**3 * wbar * e1 * r3**3
+        - 6 * a**3 * wbar * e2**2 * r3**3
+        + 4 * a**3 * wbar * e2 * r3**3
+        + 9 * a**3 * e1**3 * r3**2
+        - 3 * a**3 * e1**2 * e2 * r3**2
+        - 4 * a**3 * e1**2 * r3**2
+        + 3 * a**3 * e1 * e2**2 * r3**2
+        + 4 * a**3 * e1 * r3**2
+        - 9 * a**3 * e2**3 * r3**2
+        + 4 * a**3 * e2**2 * r3**2
+        - 4 * a**3 * e2 * r3**2
+        - 12 * a**2 * w * wbar * e1 * e2 * r3**3
+        + 4 * a**2 * w * r3bar * e1 * e2 * r3**3
+        - 9 * a**2 * w * e1**3 * r3**2
+        - 3 * a**2 * w * e1**2 * e2 * r3**2
+        - 3 * a**2 * w * e1 * e2**2 * r3**2
+        + 12 * a**2 * w * e1 * e2 * r3**2
+        - 9 * a**2 * w * e2**3 * r3**2
+        - 3 * a**2 * e1**3 * r3**3
+        + 3 * a**2 * e1**2 * e2 * r3**3
+        + 3 * a**2 * e1 * e2**2 * r3**3
+        - 4 * a**2 * e1 * e2 * r3**3
+        - 3 * a**2 * e2**3 * r3**3
+        + 3 * a * w * e1**3 * r3**3
+        + 3 * a * w * e1**2 * e2 * r3**3
+        - 3 * a * w * e1 * e2**2 * r3**3
+        - 3 * a * w * e2**3 * r3**3
     )
 
     p_9 = (
-        -3 * a ** 8 * w * wbar * r3 ** 2
-        + 3 * a ** 8 * w * r3bar * r3 ** 2
-        - 2 * a ** 8 * w * e1 * r3
-        - 2 * a ** 8 * w * e2 * r3
-        + 2 * a ** 8 * w * r3
-        - a ** 8 * wbar * r3 ** 3
-        + a ** 8 * r3bar * r3 ** 3
-        + 2 * a ** 8 * e1 * r3 ** 2
-        + 2 * a ** 8 * e2 * r3 ** 2
-        - 2 * a ** 8 * r3 ** 2
-        + 3 * a ** 7 * w * e1 * r3 ** 2
-        - 3 * a ** 7 * w * e2 * r3 ** 2
-        + 3 * a ** 7 * wbar * e1 * r3 ** 2
-        - 3 * a ** 7 * wbar * e2 * r3 ** 2
-        - 3 * a ** 7 * r3bar * e1 * r3 ** 2
-        + 3 * a ** 7 * r3bar * e2 * r3 ** 2
-        + 2 * a ** 7 * e1 ** 2 * r3
-        + a ** 7 * e1 * r3 ** 3
-        - 2 * a ** 7 * e1 * r3
-        - 2 * a ** 7 * e2 ** 2 * r3
-        - a ** 7 * e2 * r3 ** 3
-        + 2 * a ** 7 * e2 * r3
-        + 3 * a ** 6 * w * wbar ** 3 * r3 ** 2
-        - 3 * a ** 6 * w * wbar ** 2 * r3bar * r3 ** 2
-        + 6 * a ** 6 * w * wbar ** 2 * e1 * r3
-        + 6 * a ** 6 * w * wbar ** 2 * e2 * r3
-        - 6 * a ** 6 * w * wbar ** 2 * r3
-        - 4 * a ** 6 * w * wbar * r3bar * e1 * r3
-        - 4 * a ** 6 * w * wbar * r3bar * e2 * r3
-        + 4 * a ** 6 * w * wbar * r3bar * r3
-        + 3 * a ** 6 * w * wbar * e1 ** 2
-        + 6 * a ** 6 * w * wbar * e1 * e2
-        - 6 * a ** 6 * w * wbar * e1
-        + 3 * a ** 6 * w * wbar * e2 ** 2
-        - 6 * a ** 6 * w * wbar * e2
-        + 3 * a ** 6 * w * wbar
-        - a ** 6 * w * r3bar * e1 ** 2
-        - 2 * a ** 6 * w * r3bar * e1 * e2
-        + 2 * a ** 6 * w * r3bar * e1
-        - a ** 6 * w * r3bar * e2 ** 2
-        + 2 * a ** 6 * w * r3bar * e2
-        - a ** 6 * w * r3bar
-        - a ** 6 * w * e1 * r3 ** 3
-        - a ** 6 * w * e2 * r3 ** 3
-        + a ** 6 * wbar ** 3 * r3 ** 3
-        - a ** 6 * wbar ** 2 * r3bar * r3 ** 3
-        + 3 * a ** 6 * wbar ** 2 * e1 * r3 ** 2
-        + 3 * a ** 6 * wbar ** 2 * e2 * r3 ** 2
-        - 5 * a ** 6 * wbar * r3bar * e1 * r3 ** 2
-        - 5 * a ** 6 * wbar * r3bar * e2 * r3 ** 2
-        + 2 * a ** 6 * wbar * r3bar * r3 ** 2
-        + 3 * a ** 6 * wbar * e1 ** 2 * r3
-        + 6 * a ** 6 * wbar * e1 * e2 * r3
-        - 2 * a ** 6 * wbar * e1 * r3
-        + 3 * a ** 6 * wbar * e2 ** 2 * r3
-        - 2 * a ** 6 * wbar * e2 * r3
-        - a ** 6 * wbar * r3
-        - 3 * a ** 6 * r3bar * e1 ** 2 * r3
-        - 6 * a ** 6 * r3bar * e1 * e2 * r3
-        + 4 * a ** 6 * r3bar * e1 * r3
-        - 3 * a ** 6 * r3bar * e2 ** 2 * r3
-        + 4 * a ** 6 * r3bar * e2 * r3
-        - a ** 6 * r3bar * r3
-        + a ** 6 * e1 ** 3
-        + 3 * a ** 6 * e1 ** 2 * e2
-        - 3 * a ** 6 * e1 ** 2 * r3 ** 2
-        - 2 * a ** 6 * e1 ** 2
-        + 3 * a ** 6 * e1 * e2 ** 2
-        + 6 * a ** 6 * e1 * e2 * r3 ** 2
-        - 4 * a ** 6 * e1 * e2
-        + a ** 6 * e1
-        + a ** 6 * e2 ** 3
-        - 3 * a ** 6 * e2 ** 2 * r3 ** 2
-        - 2 * a ** 6 * e2 ** 2
-        + a ** 6 * e2
-        - 9 * a ** 5 * w * wbar ** 2 * e1 * r3 ** 2
-        + 9 * a ** 5 * w * wbar ** 2 * e2 * r3 ** 2
-        + 6 * a ** 5 * w * wbar * r3bar * e1 * r3 ** 2
-        - 6 * a ** 5 * w * wbar * r3bar * e2 * r3 ** 2
-        - 12 * a ** 5 * w * wbar * e1 ** 2 * r3
-        + 12 * a ** 5 * w * wbar * e1 * r3
-        + 12 * a ** 5 * w * wbar * e2 ** 2 * r3
-        - 12 * a ** 5 * w * wbar * e2 * r3
-        + 4 * a ** 5 * w * r3bar * e1 ** 2 * r3
-        - 4 * a ** 5 * w * r3bar * e1 * r3
-        - 4 * a ** 5 * w * r3bar * e2 ** 2 * r3
-        + 4 * a ** 5 * w * r3bar * e2 * r3
-        - 3 * a ** 5 * w * e1 ** 3
-        - 3 * a ** 5 * w * e1 ** 2 * e2
-        + 6 * a ** 5 * w * e1 ** 2
-        + 3 * a ** 5 * w * e1 * e2 ** 2
-        - 3 * a ** 5 * w * e1
-        + 3 * a ** 5 * w * e2 ** 3
-        - 6 * a ** 5 * w * e2 ** 2
-        + 3 * a ** 5 * w * e2
-        - 3 * a ** 5 * wbar ** 2 * e1 * r3 ** 3
-        + 3 * a ** 5 * wbar ** 2 * e2 * r3 ** 3
-        + 2 * a ** 5 * wbar * r3bar * e1 * r3 ** 3
-        - 2 * a ** 5 * wbar * r3bar * e2 * r3 ** 3
-        - 6 * a ** 5 * wbar * e1 ** 2 * r3 ** 2
-        + 6 * a ** 5 * wbar * e2 ** 2 * r3 ** 2
-        + 5 * a ** 5 * r3bar * e1 ** 2 * r3 ** 2
-        - 2 * a ** 5 * r3bar * e1 * r3 ** 2
-        - 5 * a ** 5 * r3bar * e2 ** 2 * r3 ** 2
-        + 2 * a ** 5 * r3bar * e2 * r3 ** 2
-        - 3 * a ** 5 * e1 ** 3 * r3
-        - 3 * a ** 5 * e1 ** 2 * e2 * r3
-        + a ** 5 * e1 ** 2 * r3 ** 3
-        + 2 * a ** 5 * e1 ** 2 * r3
-        + 3 * a ** 5 * e1 * e2 ** 2 * r3
-        + a ** 5 * e1 * r3
-        + 3 * a ** 5 * e2 ** 3 * r3
-        - a ** 5 * e2 ** 2 * r3 ** 3
-        - 2 * a ** 5 * e2 ** 2 * r3
-        - a ** 5 * e2 * r3
-        + 3 * a ** 4 * w * wbar ** 2 * e1 * r3 ** 3
-        + 3 * a ** 4 * w * wbar ** 2 * e2 * r3 ** 3
-        - 2 * a ** 4 * w * wbar * r3bar * e1 * r3 ** 3
-        - 2 * a ** 4 * w * wbar * r3bar * e2 * r3 ** 3
-        + 15 * a ** 4 * w * wbar * e1 ** 2 * r3 ** 2
-        - 6 * a ** 4 * w * wbar * e1 * e2 * r3 ** 2
-        - 6 * a ** 4 * w * wbar * e1 * r3 ** 2
-        + 15 * a ** 4 * w * wbar * e2 ** 2 * r3 ** 2
-        - 6 * a ** 4 * w * wbar * e2 * r3 ** 2
-        - 5 * a ** 4 * w * r3bar * e1 ** 2 * r3 ** 2
-        + 2 * a ** 4 * w * r3bar * e1 * e2 * r3 ** 2
-        + 2 * a ** 4 * w * r3bar * e1 * r3 ** 2
-        - 5 * a ** 4 * w * r3bar * e2 ** 2 * r3 ** 2
-        + 2 * a ** 4 * w * r3bar * e2 * r3 ** 2
-        + 9 * a ** 4 * w * e1 ** 3 * r3
-        + 3 * a ** 4 * w * e1 ** 2 * e2 * r3
-        - 12 * a ** 4 * w * e1 ** 2 * r3
-        + 3 * a ** 4 * w * e1 * e2 ** 2 * r3
-        + 3 * a ** 4 * w * e1 * r3
-        + 9 * a ** 4 * w * e2 ** 3 * r3
-        - 12 * a ** 4 * w * e2 ** 2 * r3
-        + 3 * a ** 4 * w * e2 * r3
-        + 3 * a ** 4 * wbar * e1 ** 2 * r3 ** 3
-        - 6 * a ** 4 * wbar * e1 * e2 * r3 ** 3
-        + 2 * a ** 4 * wbar * e1 * r3 ** 3
-        + 3 * a ** 4 * wbar * e2 ** 2 * r3 ** 3
-        + 2 * a ** 4 * wbar * e2 * r3 ** 3
-        - 2 * a ** 4 * r3bar * e1 ** 2 * r3 ** 3
-        - 2 * a ** 4 * r3bar * e2 ** 2 * r3 ** 3
-        + 3 * a ** 4 * e1 ** 3 * r3 ** 2
-        - 3 * a ** 4 * e1 ** 2 * e2 * r3 ** 2
-        + 2 * a ** 4 * e1 ** 2 * r3 ** 2
-        - 3 * a ** 4 * e1 * e2 ** 2 * r3 ** 2
-        + 4 * a ** 4 * e1 * e2 * r3 ** 2
-        - 2 * a ** 4 * e1 * r3 ** 2
-        + 3 * a ** 4 * e2 ** 3 * r3 ** 2
-        + 2 * a ** 4 * e2 ** 2 * r3 ** 2
-        - 2 * a ** 4 * e2 * r3 ** 2
-        - 6 * a ** 3 * w * wbar * e1 ** 2 * r3 ** 3
-        + 6 * a ** 3 * w * wbar * e2 ** 2 * r3 ** 3
-        + 2 * a ** 3 * w * r3bar * e1 ** 2 * r3 ** 3
-        - 2 * a ** 3 * w * r3bar * e2 ** 2 * r3 ** 3
-        - 9 * a ** 3 * w * e1 ** 3 * r3 ** 2
-        + 3 * a ** 3 * w * e1 ** 2 * e2 * r3 ** 2
-        + 6 * a ** 3 * w * e1 ** 2 * r3 ** 2
-        - 3 * a ** 3 * w * e1 * e2 ** 2 * r3 ** 2
-        + 9 * a ** 3 * w * e2 ** 3 * r3 ** 2
-        - 6 * a ** 3 * w * e2 ** 2 * r3 ** 2
-        - a ** 3 * e1 ** 3 * r3 ** 3
-        + 3 * a ** 3 * e1 ** 2 * e2 * r3 ** 3
-        - 2 * a ** 3 * e1 ** 2 * r3 ** 3
-        - 3 * a ** 3 * e1 * e2 ** 2 * r3 ** 3
-        + a ** 3 * e2 ** 3 * r3 ** 3
-        + 2 * a ** 3 * e2 ** 2 * r3 ** 3
-        + 3 * a ** 2 * w * e1 ** 3 * r3 ** 3
-        - 3 * a ** 2 * w * e1 ** 2 * e2 * r3 ** 3
-        - 3 * a ** 2 * w * e1 * e2 ** 2 * r3 ** 3
-        + 3 * a ** 2 * w * e2 ** 3 * r3 ** 3
+        -3 * a**8 * w * wbar * r3**2
+        + 3 * a**8 * w * r3bar * r3**2
+        - 2 * a**8 * w * e1 * r3
+        - 2 * a**8 * w * e2 * r3
+        + 2 * a**8 * w * r3
+        - a**8 * wbar * r3**3
+        + a**8 * r3bar * r3**3
+        + 2 * a**8 * e1 * r3**2
+        + 2 * a**8 * e2 * r3**2
+        - 2 * a**8 * r3**2
+        + 3 * a**7 * w * e1 * r3**2
+        - 3 * a**7 * w * e2 * r3**2
+        + 3 * a**7 * wbar * e1 * r3**2
+        - 3 * a**7 * wbar * e2 * r3**2
+        - 3 * a**7 * r3bar * e1 * r3**2
+        + 3 * a**7 * r3bar * e2 * r3**2
+        + 2 * a**7 * e1**2 * r3
+        + a**7 * e1 * r3**3
+        - 2 * a**7 * e1 * r3
+        - 2 * a**7 * e2**2 * r3
+        - a**7 * e2 * r3**3
+        + 2 * a**7 * e2 * r3
+        + 3 * a**6 * w * wbar**3 * r3**2
+        - 3 * a**6 * w * wbar**2 * r3bar * r3**2
+        + 6 * a**6 * w * wbar**2 * e1 * r3
+        + 6 * a**6 * w * wbar**2 * e2 * r3
+        - 6 * a**6 * w * wbar**2 * r3
+        - 4 * a**6 * w * wbar * r3bar * e1 * r3
+        - 4 * a**6 * w * wbar * r3bar * e2 * r3
+        + 4 * a**6 * w * wbar * r3bar * r3
+        + 3 * a**6 * w * wbar * e1**2
+        + 6 * a**6 * w * wbar * e1 * e2
+        - 6 * a**6 * w * wbar * e1
+        + 3 * a**6 * w * wbar * e2**2
+        - 6 * a**6 * w * wbar * e2
+        + 3 * a**6 * w * wbar
+        - a**6 * w * r3bar * e1**2
+        - 2 * a**6 * w * r3bar * e1 * e2
+        + 2 * a**6 * w * r3bar * e1
+        - a**6 * w * r3bar * e2**2
+        + 2 * a**6 * w * r3bar * e2
+        - a**6 * w * r3bar
+        - a**6 * w * e1 * r3**3
+        - a**6 * w * e2 * r3**3
+        + a**6 * wbar**3 * r3**3
+        - a**6 * wbar**2 * r3bar * r3**3
+        + 3 * a**6 * wbar**2 * e1 * r3**2
+        + 3 * a**6 * wbar**2 * e2 * r3**2
+        - 5 * a**6 * wbar * r3bar * e1 * r3**2
+        - 5 * a**6 * wbar * r3bar * e2 * r3**2
+        + 2 * a**6 * wbar * r3bar * r3**2
+        + 3 * a**6 * wbar * e1**2 * r3
+        + 6 * a**6 * wbar * e1 * e2 * r3
+        - 2 * a**6 * wbar * e1 * r3
+        + 3 * a**6 * wbar * e2**2 * r3
+        - 2 * a**6 * wbar * e2 * r3
+        - a**6 * wbar * r3
+        - 3 * a**6 * r3bar * e1**2 * r3
+        - 6 * a**6 * r3bar * e1 * e2 * r3
+        + 4 * a**6 * r3bar * e1 * r3
+        - 3 * a**6 * r3bar * e2**2 * r3
+        + 4 * a**6 * r3bar * e2 * r3
+        - a**6 * r3bar * r3
+        + a**6 * e1**3
+        + 3 * a**6 * e1**2 * e2
+        - 3 * a**6 * e1**2 * r3**2
+        - 2 * a**6 * e1**2
+        + 3 * a**6 * e1 * e2**2
+        + 6 * a**6 * e1 * e2 * r3**2
+        - 4 * a**6 * e1 * e2
+        + a**6 * e1
+        + a**6 * e2**3
+        - 3 * a**6 * e2**2 * r3**2
+        - 2 * a**6 * e2**2
+        + a**6 * e2
+        - 9 * a**5 * w * wbar**2 * e1 * r3**2
+        + 9 * a**5 * w * wbar**2 * e2 * r3**2
+        + 6 * a**5 * w * wbar * r3bar * e1 * r3**2
+        - 6 * a**5 * w * wbar * r3bar * e2 * r3**2
+        - 12 * a**5 * w * wbar * e1**2 * r3
+        + 12 * a**5 * w * wbar * e1 * r3
+        + 12 * a**5 * w * wbar * e2**2 * r3
+        - 12 * a**5 * w * wbar * e2 * r3
+        + 4 * a**5 * w * r3bar * e1**2 * r3
+        - 4 * a**5 * w * r3bar * e1 * r3
+        - 4 * a**5 * w * r3bar * e2**2 * r3
+        + 4 * a**5 * w * r3bar * e2 * r3
+        - 3 * a**5 * w * e1**3
+        - 3 * a**5 * w * e1**2 * e2
+        + 6 * a**5 * w * e1**2
+        + 3 * a**5 * w * e1 * e2**2
+        - 3 * a**5 * w * e1
+        + 3 * a**5 * w * e2**3
+        - 6 * a**5 * w * e2**2
+        + 3 * a**5 * w * e2
+        - 3 * a**5 * wbar**2 * e1 * r3**3
+        + 3 * a**5 * wbar**2 * e2 * r3**3
+        + 2 * a**5 * wbar * r3bar * e1 * r3**3
+        - 2 * a**5 * wbar * r3bar * e2 * r3**3
+        - 6 * a**5 * wbar * e1**2 * r3**2
+        + 6 * a**5 * wbar * e2**2 * r3**2
+        + 5 * a**5 * r3bar * e1**2 * r3**2
+        - 2 * a**5 * r3bar * e1 * r3**2
+        - 5 * a**5 * r3bar * e2**2 * r3**2
+        + 2 * a**5 * r3bar * e2 * r3**2
+        - 3 * a**5 * e1**3 * r3
+        - 3 * a**5 * e1**2 * e2 * r3
+        + a**5 * e1**2 * r3**3
+        + 2 * a**5 * e1**2 * r3
+        + 3 * a**5 * e1 * e2**2 * r3
+        + a**5 * e1 * r3
+        + 3 * a**5 * e2**3 * r3
+        - a**5 * e2**2 * r3**3
+        - 2 * a**5 * e2**2 * r3
+        - a**5 * e2 * r3
+        + 3 * a**4 * w * wbar**2 * e1 * r3**3
+        + 3 * a**4 * w * wbar**2 * e2 * r3**3
+        - 2 * a**4 * w * wbar * r3bar * e1 * r3**3
+        - 2 * a**4 * w * wbar * r3bar * e2 * r3**3
+        + 15 * a**4 * w * wbar * e1**2 * r3**2
+        - 6 * a**4 * w * wbar * e1 * e2 * r3**2
+        - 6 * a**4 * w * wbar * e1 * r3**2
+        + 15 * a**4 * w * wbar * e2**2 * r3**2
+        - 6 * a**4 * w * wbar * e2 * r3**2
+        - 5 * a**4 * w * r3bar * e1**2 * r3**2
+        + 2 * a**4 * w * r3bar * e1 * e2 * r3**2
+        + 2 * a**4 * w * r3bar * e1 * r3**2
+        - 5 * a**4 * w * r3bar * e2**2 * r3**2
+        + 2 * a**4 * w * r3bar * e2 * r3**2
+        + 9 * a**4 * w * e1**3 * r3
+        + 3 * a**4 * w * e1**2 * e2 * r3
+        - 12 * a**4 * w * e1**2 * r3
+        + 3 * a**4 * w * e1 * e2**2 * r3
+        + 3 * a**4 * w * e1 * r3
+        + 9 * a**4 * w * e2**3 * r3
+        - 12 * a**4 * w * e2**2 * r3
+        + 3 * a**4 * w * e2 * r3
+        + 3 * a**4 * wbar * e1**2 * r3**3
+        - 6 * a**4 * wbar * e1 * e2 * r3**3
+        + 2 * a**4 * wbar * e1 * r3**3
+        + 3 * a**4 * wbar * e2**2 * r3**3
+        + 2 * a**4 * wbar * e2 * r3**3
+        - 2 * a**4 * r3bar * e1**2 * r3**3
+        - 2 * a**4 * r3bar * e2**2 * r3**3
+        + 3 * a**4 * e1**3 * r3**2
+        - 3 * a**4 * e1**2 * e2 * r3**2
+        + 2 * a**4 * e1**2 * r3**2
+        - 3 * a**4 * e1 * e2**2 * r3**2
+        + 4 * a**4 * e1 * e2 * r3**2
+        - 2 * a**4 * e1 * r3**2
+        + 3 * a**4 * e2**3 * r3**2
+        + 2 * a**4 * e2**2 * r3**2
+        - 2 * a**4 * e2 * r3**2
+        - 6 * a**3 * w * wbar * e1**2 * r3**3
+        + 6 * a**3 * w * wbar * e2**2 * r3**3
+        + 2 * a**3 * w * r3bar * e1**2 * r3**3
+        - 2 * a**3 * w * r3bar * e2**2 * r3**3
+        - 9 * a**3 * w * e1**3 * r3**2
+        + 3 * a**3 * w * e1**2 * e2 * r3**2
+        + 6 * a**3 * w * e1**2 * r3**2
+        - 3 * a**3 * w * e1 * e2**2 * r3**2
+        + 9 * a**3 * w * e2**3 * r3**2
+        - 6 * a**3 * w * e2**2 * r3**2
+        - a**3 * e1**3 * r3**3
+        + 3 * a**3 * e1**2 * e2 * r3**3
+        - 2 * a**3 * e1**2 * r3**3
+        - 3 * a**3 * e1 * e2**2 * r3**3
+        + a**3 * e2**3 * r3**3
+        + 2 * a**3 * e2**2 * r3**3
+        + 3 * a**2 * w * e1**3 * r3**3
+        - 3 * a**2 * w * e1**2 * e2 * r3**3
+        - 3 * a**2 * w * e1 * e2**2 * r3**3
+        + 3 * a**2 * w * e2**3 * r3**3
     )
 
     p_10 = (
-        a ** 8 * w * wbar * r3 ** 3
-        - a ** 8 * w * r3bar * r3 ** 3
-        + a ** 8 * w * e1 * r3 ** 2
-        + a ** 8 * w * e2 * r3 ** 2
-        - a ** 8 * w * r3 ** 2
-        - a ** 8 * e1 * r3 ** 3
-        - a ** 8 * e2 * r3 ** 3
-        + a ** 8 * r3 ** 3
-        - a ** 7 * w * e1 * r3 ** 3
-        + a ** 7 * w * e2 * r3 ** 3
-        - a ** 7 * wbar * e1 * r3 ** 3
-        + a ** 7 * wbar * e2 * r3 ** 3
-        + a ** 7 * r3bar * e1 * r3 ** 3
-        - a ** 7 * r3bar * e2 * r3 ** 3
-        - a ** 7 * e1 ** 2 * r3 ** 2
-        + a ** 7 * e1 * r3 ** 2
-        + a ** 7 * e2 ** 2 * r3 ** 2
-        - a ** 7 * e2 * r3 ** 2
-        - a ** 6 * w * wbar ** 3 * r3 ** 3
-        + a ** 6 * w * wbar ** 2 * r3bar * r3 ** 3
-        - 3 * a ** 6 * w * wbar ** 2 * e1 * r3 ** 2
-        - 3 * a ** 6 * w * wbar ** 2 * e2 * r3 ** 2
-        + 3 * a ** 6 * w * wbar ** 2 * r3 ** 2
-        + 2 * a ** 6 * w * wbar * r3bar * e1 * r3 ** 2
-        + 2 * a ** 6 * w * wbar * r3bar * e2 * r3 ** 2
-        - 2 * a ** 6 * w * wbar * r3bar * r3 ** 2
-        - 3 * a ** 6 * w * wbar * e1 ** 2 * r3
-        - 6 * a ** 6 * w * wbar * e1 * e2 * r3
-        + 6 * a ** 6 * w * wbar * e1 * r3
-        - 3 * a ** 6 * w * wbar * e2 ** 2 * r3
-        + 6 * a ** 6 * w * wbar * e2 * r3
-        - 3 * a ** 6 * w * wbar * r3
-        + a ** 6 * w * r3bar * e1 ** 2 * r3
-        + 2 * a ** 6 * w * r3bar * e1 * e2 * r3
-        - 2 * a ** 6 * w * r3bar * e1 * r3
-        + a ** 6 * w * r3bar * e2 ** 2 * r3
-        - 2 * a ** 6 * w * r3bar * e2 * r3
-        + a ** 6 * w * r3bar * r3
-        - a ** 6 * w * e1 ** 3
-        - 3 * a ** 6 * w * e1 ** 2 * e2
-        + 3 * a ** 6 * w * e1 ** 2
-        - 3 * a ** 6 * w * e1 * e2 ** 2
-        + 6 * a ** 6 * w * e1 * e2
-        - 3 * a ** 6 * w * e1
-        - a ** 6 * w * e2 ** 3
-        + 3 * a ** 6 * w * e2 ** 2
-        - 3 * a ** 6 * w * e2
-        + a ** 6 * w
-        - a ** 6 * wbar ** 2 * r3 ** 3
-        + a ** 6 * wbar * r3bar * e1 * r3 ** 3
-        + a ** 6 * wbar * r3bar * e2 * r3 ** 3
-        - 2 * a ** 6 * wbar * e1 * r3 ** 2
-        - 2 * a ** 6 * wbar * e2 * r3 ** 2
-        + 2 * a ** 6 * wbar * r3 ** 2
-        + a ** 6 * r3bar * e1 ** 2 * r3 ** 2
-        + 2 * a ** 6 * r3bar * e1 * e2 * r3 ** 2
-        - a ** 6 * r3bar * e1 * r3 ** 2
-        + a ** 6 * r3bar * e2 ** 2 * r3 ** 2
-        - a ** 6 * r3bar * e2 * r3 ** 2
-        + a ** 6 * e1 ** 2 * r3 ** 3
-        - a ** 6 * e1 ** 2 * r3
-        - 2 * a ** 6 * e1 * e2 * r3 ** 3
-        - 2 * a ** 6 * e1 * e2 * r3
-        + 2 * a ** 6 * e1 * r3
-        + a ** 6 * e2 ** 2 * r3 ** 3
-        - a ** 6 * e2 ** 2 * r3
-        + 2 * a ** 6 * e2 * r3
-        - a ** 6 * r3
-        + 3 * a ** 5 * w * wbar ** 2 * e1 * r3 ** 3
-        - 3 * a ** 5 * w * wbar ** 2 * e2 * r3 ** 3
-        - 2 * a ** 5 * w * wbar * r3bar * e1 * r3 ** 3
-        + 2 * a ** 5 * w * wbar * r3bar * e2 * r3 ** 3
-        + 6 * a ** 5 * w * wbar * e1 ** 2 * r3 ** 2
-        - 6 * a ** 5 * w * wbar * e1 * r3 ** 2
-        - 6 * a ** 5 * w * wbar * e2 ** 2 * r3 ** 2
-        + 6 * a ** 5 * w * wbar * e2 * r3 ** 2
-        - 2 * a ** 5 * w * r3bar * e1 ** 2 * r3 ** 2
-        + 2 * a ** 5 * w * r3bar * e1 * r3 ** 2
-        + 2 * a ** 5 * w * r3bar * e2 ** 2 * r3 ** 2
-        - 2 * a ** 5 * w * r3bar * e2 * r3 ** 2
-        + 3 * a ** 5 * w * e1 ** 3 * r3
-        + 3 * a ** 5 * w * e1 ** 2 * e2 * r3
-        - 6 * a ** 5 * w * e1 ** 2 * r3
-        - 3 * a ** 5 * w * e1 * e2 ** 2 * r3
-        + 3 * a ** 5 * w * e1 * r3
-        - 3 * a ** 5 * w * e2 ** 3 * r3
-        + 6 * a ** 5 * w * e2 ** 2 * r3
-        - 3 * a ** 5 * w * e2 * r3
-        + 2 * a ** 5 * wbar * e1 * r3 ** 3
-        - 2 * a ** 5 * wbar * e2 * r3 ** 3
-        - a ** 5 * r3bar * e1 ** 2 * r3 ** 3
-        + a ** 5 * r3bar * e2 ** 2 * r3 ** 3
-        + 2 * a ** 5 * e1 ** 2 * r3 ** 2
-        - 2 * a ** 5 * e1 * r3 ** 2
-        - 2 * a ** 5 * e2 ** 2 * r3 ** 2
-        + 2 * a ** 5 * e2 * r3 ** 2
-        - 3 * a ** 4 * w * wbar * e1 ** 2 * r3 ** 3
-        + 6 * a ** 4 * w * wbar * e1 * e2 * r3 ** 3
-        - 3 * a ** 4 * w * wbar * e2 ** 2 * r3 ** 3
-        + a ** 4 * w * r3bar * e1 ** 2 * r3 ** 3
-        - 2 * a ** 4 * w * r3bar * e1 * e2 * r3 ** 3
-        + a ** 4 * w * r3bar * e2 ** 2 * r3 ** 3
-        - 3 * a ** 4 * w * e1 ** 3 * r3 ** 2
-        + 3 * a ** 4 * w * e1 ** 2 * e2 * r3 ** 2
-        + 3 * a ** 4 * w * e1 ** 2 * r3 ** 2
-        + 3 * a ** 4 * w * e1 * e2 ** 2 * r3 ** 2
-        - 6 * a ** 4 * w * e1 * e2 * r3 ** 2
-        - 3 * a ** 4 * w * e2 ** 3 * r3 ** 2
-        + 3 * a ** 4 * w * e2 ** 2 * r3 ** 2
-        - a ** 4 * e1 ** 2 * r3 ** 3
-        + 2 * a ** 4 * e1 * e2 * r3 ** 3
-        - a ** 4 * e2 ** 2 * r3 ** 3
-        + a ** 3 * w * e1 ** 3 * r3 ** 3
-        - 3 * a ** 3 * w * e1 ** 2 * e2 * r3 ** 3
-        + 3 * a ** 3 * w * e1 * e2 ** 2 * r3 ** 3
-        - a ** 3 * w * e2 ** 3 * r3 ** 3
+        a**8 * w * wbar * r3**3
+        - a**8 * w * r3bar * r3**3
+        + a**8 * w * e1 * r3**2
+        + a**8 * w * e2 * r3**2
+        - a**8 * w * r3**2
+        - a**8 * e1 * r3**3
+        - a**8 * e2 * r3**3
+        + a**8 * r3**3
+        - a**7 * w * e1 * r3**3
+        + a**7 * w * e2 * r3**3
+        - a**7 * wbar * e1 * r3**3
+        + a**7 * wbar * e2 * r3**3
+        + a**7 * r3bar * e1 * r3**3
+        - a**7 * r3bar * e2 * r3**3
+        - a**7 * e1**2 * r3**2
+        + a**7 * e1 * r3**2
+        + a**7 * e2**2 * r3**2
+        - a**7 * e2 * r3**2
+        - a**6 * w * wbar**3 * r3**3
+        + a**6 * w * wbar**2 * r3bar * r3**3
+        - 3 * a**6 * w * wbar**2 * e1 * r3**2
+        - 3 * a**6 * w * wbar**2 * e2 * r3**2
+        + 3 * a**6 * w * wbar**2 * r3**2
+        + 2 * a**6 * w * wbar * r3bar * e1 * r3**2
+        + 2 * a**6 * w * wbar * r3bar * e2 * r3**2
+        - 2 * a**6 * w * wbar * r3bar * r3**2
+        - 3 * a**6 * w * wbar * e1**2 * r3
+        - 6 * a**6 * w * wbar * e1 * e2 * r3
+        + 6 * a**6 * w * wbar * e1 * r3
+        - 3 * a**6 * w * wbar * e2**2 * r3
+        + 6 * a**6 * w * wbar * e2 * r3
+        - 3 * a**6 * w * wbar * r3
+        + a**6 * w * r3bar * e1**2 * r3
+        + 2 * a**6 * w * r3bar * e1 * e2 * r3
+        - 2 * a**6 * w * r3bar * e1 * r3
+        + a**6 * w * r3bar * e2**2 * r3
+        - 2 * a**6 * w * r3bar * e2 * r3
+        + a**6 * w * r3bar * r3
+        - a**6 * w * e1**3
+        - 3 * a**6 * w * e1**2 * e2
+        + 3 * a**6 * w * e1**2
+        - 3 * a**6 * w * e1 * e2**2
+        + 6 * a**6 * w * e1 * e2
+        - 3 * a**6 * w * e1
+        - a**6 * w * e2**3
+        + 3 * a**6 * w * e2**2
+        - 3 * a**6 * w * e2
+        + a**6 * w
+        - a**6 * wbar**2 * r3**3
+        + a**6 * wbar * r3bar * e1 * r3**3
+        + a**6 * wbar * r3bar * e2 * r3**3
+        - 2 * a**6 * wbar * e1 * r3**2
+        - 2 * a**6 * wbar * e2 * r3**2
+        + 2 * a**6 * wbar * r3**2
+        + a**6 * r3bar * e1**2 * r3**2
+        + 2 * a**6 * r3bar * e1 * e2 * r3**2
+        - a**6 * r3bar * e1 * r3**2
+        + a**6 * r3bar * e2**2 * r3**2
+        - a**6 * r3bar * e2 * r3**2
+        + a**6 * e1**2 * r3**3
+        - a**6 * e1**2 * r3
+        - 2 * a**6 * e1 * e2 * r3**3
+        - 2 * a**6 * e1 * e2 * r3
+        + 2 * a**6 * e1 * r3
+        + a**6 * e2**2 * r3**3
+        - a**6 * e2**2 * r3
+        + 2 * a**6 * e2 * r3
+        - a**6 * r3
+        + 3 * a**5 * w * wbar**2 * e1 * r3**3
+        - 3 * a**5 * w * wbar**2 * e2 * r3**3
+        - 2 * a**5 * w * wbar * r3bar * e1 * r3**3
+        + 2 * a**5 * w * wbar * r3bar * e2 * r3**3
+        + 6 * a**5 * w * wbar * e1**2 * r3**2
+        - 6 * a**5 * w * wbar * e1 * r3**2
+        - 6 * a**5 * w * wbar * e2**2 * r3**2
+        + 6 * a**5 * w * wbar * e2 * r3**2
+        - 2 * a**5 * w * r3bar * e1**2 * r3**2
+        + 2 * a**5 * w * r3bar * e1 * r3**2
+        + 2 * a**5 * w * r3bar * e2**2 * r3**2
+        - 2 * a**5 * w * r3bar * e2 * r3**2
+        + 3 * a**5 * w * e1**3 * r3
+        + 3 * a**5 * w * e1**2 * e2 * r3
+        - 6 * a**5 * w * e1**2 * r3
+        - 3 * a**5 * w * e1 * e2**2 * r3
+        + 3 * a**5 * w * e1 * r3
+        - 3 * a**5 * w * e2**3 * r3
+        + 6 * a**5 * w * e2**2 * r3
+        - 3 * a**5 * w * e2 * r3
+        + 2 * a**5 * wbar * e1 * r3**3
+        - 2 * a**5 * wbar * e2 * r3**3
+        - a**5 * r3bar * e1**2 * r3**3
+        + a**5 * r3bar * e2**2 * r3**3
+        + 2 * a**5 * e1**2 * r3**2
+        - 2 * a**5 * e1 * r3**2
+        - 2 * a**5 * e2**2 * r3**2
+        + 2 * a**5 * e2 * r3**2
+        - 3 * a**4 * w * wbar * e1**2 * r3**3
+        + 6 * a**4 * w * wbar * e1 * e2 * r3**3
+        - 3 * a**4 * w * wbar * e2**2 * r3**3
+        + a**4 * w * r3bar * e1**2 * r3**3
+        - 2 * a**4 * w * r3bar * e1 * e2 * r3**3
+        + a**4 * w * r3bar * e2**2 * r3**3
+        - 3 * a**4 * w * e1**3 * r3**2
+        + 3 * a**4 * w * e1**2 * e2 * r3**2
+        + 3 * a**4 * w * e1**2 * r3**2
+        + 3 * a**4 * w * e1 * e2**2 * r3**2
+        - 6 * a**4 * w * e1 * e2 * r3**2
+        - 3 * a**4 * w * e2**3 * r3**2
+        + 3 * a**4 * w * e2**2 * r3**2
+        - a**4 * e1**2 * r3**3
+        + 2 * a**4 * e1 * e2 * r3**3
+        - a**4 * e2**2 * r3**3
+        + a**3 * w * e1**3 * r3**3
+        - 3 * a**3 * w * e1**2 * e2 * r3**3
+        + 3 * a**3 * w * e1 * e2**2 * r3**3
+        - a**3 * w * e2**3 * r3**3
     )
 
     p = jnp.stack([p_0, p_1, p_2, p_3, p_4, p_5, p_6, p_7, p_8, p_9, p_10])
@@ -1494,9 +1490,9 @@ def _poly_coeffs_critical_binary(phi, a, e1):
     """
     p_0 = jnp.exp(-1j * phi)
     p_1 = jnp.zeros_like(phi)
-    p_2 = -2 * a ** 2 * jnp.exp(-1j * phi) - 1.0
+    p_2 = -2 * a**2 * jnp.exp(-1j * phi) - 1.0
     p_3 = (-4 * a * e1 + 2 * a) * jnp.ones_like(phi)
-    p_4 = a ** 4 * jnp.exp(-1j * phi) - a ** 2
+    p_4 = a**4 * jnp.exp(-1j * phi) - a**2
 
     p = jnp.stack([p_0, p_1, p_2, p_3, p_4])
 
@@ -1509,33 +1505,33 @@ def _poly_coeffs_critical_triple(phi, a, r3, e1, e2):
 
     p_0 = x
     p_1 = -2 * x * r3
-    p_2 = -2 * a ** 2 * x - 1 + x * r3 ** 2
-    p_3 = 4 * a ** 2 * x * r3 - 2 * a * e1 + 2 * a * e2 + 2 * e1 * r3 + 2 * e2 * r3
+    p_2 = -2 * a**2 * x - 1 + x * r3**2
+    p_3 = 4 * a**2 * x * r3 - 2 * a * e1 + 2 * a * e2 + 2 * e1 * r3 + 2 * e2 * r3
     p_4 = (
-        a ** 4 * x
-        - 3 * a ** 2 * e1
-        - 3 * a ** 2 * e2
-        + 2 * a ** 2
-        - 2 * a ** 2 * x * r3 ** 2
+        a**4 * x
+        - 3 * a**2 * e1
+        - 3 * a**2 * e2
+        + 2 * a**2
+        - 2 * a**2 * x * r3**2
         + 4 * a * e1 * r3
         - 4 * a * e2 * r3
-        - e1 * r3 ** 2
-        - e2 * r3 ** 2
+        - e1 * r3**2
+        - e2 * r3**2
     )
     p_5 = (
-        -2 * a ** 4 * x * r3
-        + 2 * a ** 2 * e1 * r3
-        + 2 * a ** 2 * e2 * r3
-        - 2 * a * e1 * r3 ** 2
-        + 2 * a * e2 * r3 ** 2
+        -2 * a**4 * x * r3
+        + 2 * a**2 * e1 * r3
+        + 2 * a**2 * e2 * r3
+        - 2 * a * e1 * r3**2
+        + 2 * a * e2 * r3**2
     )
     p_6 = (
-        a ** 4 * e1
-        + a ** 4 * e2
-        - a ** 4
-        + a ** 4 * x * r3 ** 2
-        - a ** 2 * e1 * r3 ** 2
-        - a ** 2 * e2 * r3 ** 2
+        a**4 * e1
+        + a**4 * e2
+        - a**4
+        + a**4 * x * r3**2
+        - a**2 * e1 * r3**2
+        - a**2 * e2 * r3**2
     )
 
     p = jnp.stack([p_0, p_1, p_2, p_3, p_4, p_5, p_6])
@@ -1543,148 +1539,168 @@ def _poly_coeffs_critical_triple(phi, a, r3, e1, e2):
     return p
 
 
-@jit
-def lens_eq_binary(z, a, e1):
+@partial(jit, static_argnames=("nlenses"))
+def lens_eq(z, nlenses=2, **params):
     zbar = jnp.conjugate(z)
-    return z - e1 / (zbar - a) - (1.0 - e1) / (zbar + a)
 
+    if nlenses == 1:
+        return z - 1 / zbar
 
-@jit
-def lens_eq_triple(z, a, r3, e1, e2):
-    zbar = jnp.conjugate(z)
-    return (
-        z
-        - e1 / (zbar - a)
-        - e2 / (zbar + a)
-        - (1.0 - e1 - e2) / (zbar - jnp.conjugate(r3))
-    )
+    elif nlenses == 2:
+        a, e1 = params["a"], params["e1"]
+        return z - e1 / (zbar - a) - (1.0 - e1) / (zbar + a)
 
-
-@jit
-def lens_eq_jac_det_binary(z, a, e1):
-    zbar = jnp.conjugate(z)
-    return 1.0 - jnp.abs(e1 / (zbar - a) ** 2 + (1.0 - e1) / (zbar + a) ** 2) ** 2
-
-
-@jit
-def lens_eq_jac_det_triple(z, a, r3, e1, e2):
-    zbar = jnp.conjugate(z)
-    return (
-        1.0
-        - jnp.abs(
-            e1 / (zbar - a) ** 2
-            + e2 / (zbar + a) ** 2
-            + (1.0 - e1 - e2) / (zbar - jnp.conjugate(r3)) ** 2
+    elif nlenses == 3:
+        a, r3, e1, e2 = params["a"], params["r3"], params["e1"], params["e2"]
+        return (
+            z
+            - e1 / (zbar - a)
+            - e2 / (zbar + a)
+            - (1.0 - e1 - e2) / (zbar - jnp.conjugate(r3))
         )
-        ** 2
-    )
+
+    else:
+        raise ValueError("`nlenses` has to be set to be <= 3.")
 
 
-@partial(jit, static_argnames=("npts"))
-def critical_and_caustic_curves_binary(a, e1, npts=200):
+@partial(jit, static_argnames=("nlenses"))
+def lens_eq_det_jac(z, nlenses=2, **params):
+    zbar = jnp.conjugate(z)
+
+    if nlenses == 1:
+        return 1.0 - 1.0 / jnp.abs(zbar**2)
+
+    elif nlenses == 2:
+        a, e1 = params["a"], params["e1"]
+        return 1.0 - jnp.abs(e1 / (zbar - a) ** 2 + (1.0 - e1) / (zbar + a) ** 2) ** 2
+
+    elif nlenses == 3:
+        a, r3, e1, e2 = params["a"], params["r3"], params["e1"], params["e2"]
+        return (
+            1.0
+            - jnp.abs(
+                e1 / (zbar - a) ** 2
+                + e2 / (zbar + a) ** 2
+                + (1.0 - e1 - e2) / (zbar - jnp.conjugate(r3)) ** 2
+            )
+            ** 2
+        )
+    else:
+        raise ValueError("`nlenses` has to be set to be <= 3.")
+
+
+@partial(jit, static_argnames=("nlenses"))
+def critical_and_caustic_curves(npts=200, nlenses=2, **params):
     phi = jnp.linspace(-np.pi, np.pi, npts)
-    coeffs = jnp.moveaxis(_poly_coeffs_critical_binary(phi, a, e1), 0, -1)
-    critical_curves = poly_roots(coeffs).reshape(-1)
-    caustic_curves = lens_eq_binary(critical_curves, a, e1)
 
-    return critical_curves, caustic_curves
+    if nlenses == 1:  # trivial
+        return jnp.exp(-1j * phi), jnp.zeros(npts).astype(jnp.complex128)
 
+    elif nlenses == 2:
+        a, e1 = params["a"], params["e1"]
+        coeffs = jnp.moveaxis(_poly_coeffs_critical_binary(phi, a, e1), 0, -1)
+        critical_curves = poly_roots(coeffs).reshape(-1)
+        caustic_curves = lens_eq(critical_curves, nlenses=2, **params)
+        return critical_curves, caustic_curves
 
-@partial(jit, static_argnames=("npts"))
-def critical_and_caustic_curves_triple(a, r3, e1, e2, npts=200):
-    phi = jnp.linspace(-np.pi, np.pi, npts)
-    coeffs = jnp.moveaxis(_poly_coeffs_critical_triple(phi, a, r3, e1, e2), 0, -1)
-    critical_curves = poly_roots(coeffs).reshape(-1)
-    caustic_curves = lens_eq_triple(critical_curves, a, r3, e1, e2)
+    elif nlenses == 3:
+        a, r3, e1, e2 = params["a"], params["r3"], params["e1"], params["e2"]
+        coeffs = jnp.moveaxis(_poly_coeffs_critical_triple(phi, a, r3, e1, e2), 0, -1)
+        critical_curves = poly_roots(coeffs).reshape(-1)
+        caustic_curves = lens_eq(critical_curves, nlenses=3, **params)
 
-    return critical_curves, caustic_curves
-
-
-@partial(jit, static_argnames=("root_solver_itmax", "compensated"))
-def images_point_source_binary(w, a, e1, root_solver_itmax=2500, compensated=False):
-    # Compute complex polynomial coefficients for each element of w
-    coeffs = _poly_coeffs_binary(w, a, e1)
-
-    # Compute roots
-    roots = poly_roots(coeffs, itmax=root_solver_itmax, compensated=compensated)
-    roots = jnp.moveaxis(roots, -1, 0)
-
-    # Evaluate the lens equation at the roots
-    lens_eq_eval = lens_eq_binary(roots, a, e1) - w
-
-    # Mask out roots which don't satisfy the lens equation
-    mask_solutions = jnp.abs(lens_eq_eval) < 1e-5
-
-    return roots, mask_solutions
+    else:
+        raise ValueError("`nlenses` has to be set to be <= 3.")
 
 
-@partial(jit, static_argnames=("root_solver_itmax", "compensated"))
-def images_point_source_triple(w, a, r3, e1, e2, root_solver_itmax=2500, compensated=False):
-    # Compute complex polynomial coefficients for each element of w
-    coeffs = _poly_coeffs_triple(w, a, r3, e1, e2)
+@partial(jit, static_argnames=("nlenses", "roots_itmax", "roots_compensated"))
+def images_point_source(
+    w, nlenses=2, roots_itmax=2500, roots_compensated=False, **params
+):
+    if nlenses == 1:
+        w_abs_sq = jnp.abs(w) ** 2
+        w_bar = jnp.conjugate(w)
+        #  Compute the image locations using the quadratic formula
+        z1 = (w_abs_sq + jnp.sqrt(w_abs_sq**2 + 4 * w_abs_sq)) / (2 * w_bar)
+        z2 = (w_abs_sq - jnp.sqrt(w_abs_sq**2 + 4 * w_abs_sq)) / (2 * w_bar)
+        z = jnp.stack(jnp.array([z1, z2]))
 
-    # Compute roots
-    roots = poly_roots(coeffs, itmax=root_solver_itmax, compensated=compensated)
-    roots = jnp.moveaxis(roots, -1, 0)
+        return z, jnp.ones(z.shape).astype(bool)
 
-    # Evaluate the lens equation at the roots
-    lens_eq_eval = lens_eq_triple(roots, a, r3, e1, e2) - w
+    elif nlenses == 2:
+        a, e1 = params["a"], params["e1"]
+        # Compute complex polynomial coefficients for each element of w
+        coeffs = _poly_coeffs_binary(w, a, e1)
 
-    # Mask out roots which don't satisfy the lens equation
-    mask_solutions = jnp.abs(lens_eq_eval) < 1e-5
+        # Compute roots
+        roots = poly_roots(coeffs, itmax=roots_itmax, compensated=roots_compensated)
+        roots = jnp.moveaxis(roots, -1, 0)
 
-    return roots, mask_solutions
+        # Evaluate the lens equation at the roots
+        lens_eq_eval = lens_eq(roots, nlenses=2, **params) - w
+
+        # Mask out roots which don't satisfy the lens equation
+        mask_solutions = jnp.abs(lens_eq_eval) < 1e-5
+
+        return roots, mask_solutions
+
+    elif nlenses == 3:
+        a, r3, e1, e2 = params["a"], params["r3"], params["e1"], params["e2"]
+        # Compute complex polynomial coefficients for each element of w
+        coeffs = _poly_coeffs_triple(w, a, r3, e1, e2)
+
+        # Compute roots
+        roots = poly_roots(coeffs, itmax=roots_itmax, compensated=roots_compensated)
+        roots = jnp.moveaxis(roots, -1, 0)
+
+        # Evaluate the lens equation at the roots
+        lens_eq_eval = lens_eq(roots, nlenses=3, **params) - w
+
+        # Mask out roots which don't satisfy the lens equation
+        mask_solutions = jnp.abs(lens_eq_eval) < 1e-5
+
+        return roots, mask_solutions
+
+    else:
+        raise ValueError("`nlenses` has to be set to be <= 3.")
 
 
-@partial(jit, static_argnames=("root_solver_itmax"))
-def mag_point_source_binary(w, a, e1, root_solver_itmax=2500):
+@partial(jit, static_argnames=("nlenses", "roots_itmax", "roots_compensated"))
+def mag_point_source(w, nlenses=2, roots_itmax=2500, roots_compensated=False, **params):
     """
-    Compute the magnification of a point source for the binary lens case.
+    Compute the magnification of a point source for a system with `nlenses`
+    lenses. If `nlenses` is 2 (binary lens) or 3 (triple lens), the coordinate
+    system is set such that the first two lenses with mass fractions
+    `$e1=m_1/m_\mathrm{total}$` and `$e2=m_2/m_\mathrm{total}$` are positioned
+    on the x-axis at locations $r_1=a$ and $r_2=-a$ respectively. The third
+    lens is at an arbitrary position in the complex plane $r_3$. For a single lens
+    lens the magnification is computed analytically. For binary and triple
+    lenses computing the magnification involves solving for the roots of a
+    complex polynomial with degree (`nlenses`**2 + 1) using the Elrich-Aberth
+    algorithm.
 
     Args:
         w (array_like): Source position in the complex plane.
-        a (float): Half the separation between the two lenses. We use the
-            convention where both lenses are located on the real line with
-            r1 = a and r2 = -a.
-        e1 (array_like): Mass fraction of the first lens e1 = m1/(m1+m2). It
-            follows that e2 = 1 - e1.
-        root_solver_itmax (int, optional): Max number of iterations for the
-            root solver. Defaults to 2500.
+        **a (float): Half the separation between the first two lenses located on
+            the real line with $r_1 = a$ and $r_2 = -a$.
+        **r3 (float): The position of the third lens at arbitrary location in
+            the complex plane.
+        **e1 (array_like): Mass fraction of the first lens located at $r_1=a$.
+        **e2 (array_like): Mass fraction of the second lens located at $r_2=-a$.
+        **roots_itmax (int, optional): Number of iterations for the root solver.
+        **roots_compensated (bool, optional): Whether to use the compensated
+            arithmetic version of the Ehrlich-Aberth root solver.
 
     Returns:
-        array_like: The magnification evaluated at w.
+        array_like: The point source magnification evaluated at w.
     """
-    images, mask = images_point_source_binary(
-        w, a, e1, root_solver_itmax=root_solver_itmax
+    images, mask = images_point_source(
+        w,
+        nlenses=nlenses,
+        roots_itmax=roots_itmax,
+        roots_compensated=roots_compensated,
+        **params
     )
-    det = lens_eq_jac_det_binary(images, a, e1)
+    det = lens_eq_det_jac(images, nlenses=nlenses, **params)
     mag = (1.0 / jnp.abs(det)) * mask
-
-    return mag.sum(axis=0).reshape(w.shape)
-
-
-@partial(jit, static_argnames=("root_solver_itmax"))
-def mag_point_source_triple(w, a, r3, e1, e2, root_solver_itmax=2500):
-    """
-    Compute the magnification of a point source for the triple lens case.
-
-    Args:
-        w (array_like): Source position in the complex plane.
-        a (float): Half the separation between the first two lenses located on
-            the real line with r1 = a and r2 = -a.
-        r3 (float): The position of the third lens.
-        e1 (array_like): Mass fraction of the first lens e1 = m1/(m1 + m2 + m3).
-        e2 (array_like): Mass fraction of the second lens e2 = m2/(m1 + m2 + m3).
-        root_solver_itmax (int, optional): Max number of iterations for the
-            root solver. Defaults to 2500.
-
-    Returns:
-        array_like: The magnification evaluated at w.
-    """
-    images, mask = images_point_source_triple(
-        w, a, r3, e1, e2, root_solver_itmax=root_solver_itmax
-    )
-    det = lens_eq_jac_det_triple(images, a, r3, e1, e2)
-    mag = (1.0 / jnp.abs(det)) * mask
-
     return mag.sum(axis=0).reshape(w.shape)

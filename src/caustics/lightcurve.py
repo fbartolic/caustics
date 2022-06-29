@@ -4,8 +4,7 @@ Function for computing the magnification of an extended source at an arbitrary
 set of points in the source plane.
 """
 __all__ = [
-    "mag_binary",
-    "mag_triple",
+    "mag",
 ]
 
 from functools import partial
@@ -15,15 +14,12 @@ import jax.numpy as jnp
 from jax import jit, vmap, lax
 
 from . import (
-    images_point_source_binary,
-    images_point_source_triple,
-    mag_extended_source_binary,
-    mag_extended_source_triple,
+    images_point_source,
+    mag_extended_source,
 )
 
 from caustics.multipole import (
-    mag_hexadecapole_binary,
-    mag_hexadecapole_triple,
+    mag_hexadecapole,
 )
 
 from .utils import *
@@ -35,28 +31,37 @@ def _extended_source_test(
     mask_z,
     w,
     rho,
-    u=0.0,
+    u1=0.0,
     c_hex=5e-03,
     c_ghost=0.9,
     c_cusp=1e-03,
     nlenses=2,
-    **kwargs
+    **params
 ):
-    # Evaluate hexadecapole approximation
-    if nlenses == 2:
-        a, e1 = kwargs["a"], kwargs["e1"]
-        mu_ps, mu_quad, mu_hex = mag_hexadecapole_binary(z, mask_z, a, e1, rho, u=u)
+    """
+    Test weather hexadecapole approximation is sufficient.
+    """
+    # For a single lens, use the full calculation if source center is
+    # at least two source radii away from the central caustic
+    mu_ps, mu_quad, mu_hex = mag_hexadecapole(
+        z, mask_z, rho, u1=u1, nlenses=nlenses, **params
+    )
+    mu_multi = mu_ps + mu_quad + mu_hex
+
+    if nlenses == 1:
+        mask_valid = jnp.abs(w) > 2 * rho
+        return mask_valid, mu_multi
+
+    elif nlenses == 2:
+        a, e1 = params["a"], params["e1"]
 
         # Derivatives
         f = lambda z: -e1 / (z - a) - (1 - e1) / (z + a)
         f_p = lambda z: e1 / (z - a) ** 2 + (1 - e1) / (z + a) ** 2
         f_pp = lambda z: 2 * (e1 / (a - z) ** 3 - (1 - e1) / (a + z) ** 3)
 
-    else:
-        a, r3, e1, e2 = kwargs["a"], kwargs["r3"], kwargs["e1"], kwargs["e2"]
-        mu_ps, mu_quad, mu_hex = mag_hexadecapole_triple(
-            z, mask_z, a, r3, e1, e2, rho, u=u
-        )
+    elif nlenses == 3:
+        a, r3, e1, e2 = params["a"], params["r3"], params["e1"], params["e2"]
 
         # Derivatives
         f = lambda z: -e1 / (z - a) - e2 / (z + a) - (1 - e1 - e2) / (z + r3)
@@ -69,6 +74,9 @@ def _extended_source_test(
             lambda z: 2 * (e1 / (a - z) ** 3 - e2 / (a + z) ** 3)
             + (1 - e1 - e2) / (z + r3) ** 3
         )
+
+    else:
+        raise ValueError("`nlenses` has to be set to be <= 3.")
 
     zbar = jnp.conjugate(z)
     zhat = jnp.conjugate(w) - f(z)
@@ -89,10 +97,9 @@ def _extended_source_test(
     mask_inside = jnp.prod(mask_z, axis=0)  # True if there are no false images
 
     # Hexadecapole and cusp test
-    mu_multi = mu_ps + mu_quad + mu_hex
     hex_test = ((jnp.abs(mu_hex) + jnp.abs(mu_quad)) / mu_ps) < c_hex
 
-    mu_cusp = 6 * jnp.imag(3 * fp_zbar ** 3.0 * fpp_z ** 2.0) / J ** 5 * rho ** 2
+    mu_cusp = 6 * jnp.imag(3 * fp_zbar**3.0 * fpp_z**2.0) / J**5 * rho**2
     mu_cusp = jnp.sum(jnp.abs(mu_cusp) * mask_z, axis=0)
     cusp_test = jnp.logical_or(mu_cusp / mu_ps < c_cusp, mask_inside)
 
@@ -120,26 +127,53 @@ def _extended_source_test(
 
 
 @partial(
-    jit, static_argnames=("npts_limb", "niter_limb", "npts_ld",),
+    jit,
+    static_argnames=(
+        "nlenses",
+        "npts_limb",
+        "niter_limb",
+        "npts_ld",
+        "roots_itmax",
+        "roots_compensated",
+    ),
 )
-def mag_binary(
-    w_points, a, e1, rho, u=0.0, npts_limb=300, niter_limb=8, npts_ld=601,
+def mag(
+    w_points,
+    rho,
+    u1=0.0,
+    nlenses=2,
+    npts_limb=300,
+    niter_limb=8,
+    npts_ld=601,
+    roots_itmax=2500,
+    roots_compensated=False,
+    **params
 ):
     """
-    Compute the binary lens magnification for an extended limb-darkned source 
-    at a set of points `w_points` in the source plane. Depending on the proximity
-    of each point to a caustic, this function will call either 
-    `mag_extended_source_binary` or `mag_hexadecapole_binary`.
+    Compute the magnification for a system with `nlenses` and an extended
+    limb-darkned source at a set of complex points `w_points` in the source plane.
+    This function calls either `mag_hexadecapole` or `mag_extended_source` for
+    each point in `w_points` depending on whether or not the hexadecapole
+    approximation is good enough.
+
+    If `nlenses` is 2 (binary lens) or 3 (triple lens), the coordinate
+    system is set such that the first two lenses with mass fractions
+    `$e1=m_1/m_\mathrm{total}$` and `$e2=m_2/m_\mathrm{total}$` are positioned
+    on the x-axis at locations $r_1=a$ and $r_2=-a$ respectively. The third
+    lens is at an arbitrary position in the complex plane $r_3$. For a single lens
+    lens the magnification is computed analytically. For binary and triple
+    lenses computing the magnification involves solving for the roots of a
+    complex polynomial with degree (`nlenses`**2 + 1) using the Elrich-Aberth
+    algorithm. Optional keywords `itmax` and `compensated` can be passed to the
+    root solver as a dictionary. `itmax` is the number of root solver iterations,
+    it defaults to `2500`, and `compensated` specifies whether the root solver
+    should use the compensated version of or the Elrich-Aberth algorithm or the
+    regular version, it defaults to `False`.
 
     Args:
-        w_points (array_like): Center of the source in the lens plane.
-        a (float): Half the separation between the two lenses. We use the
-            convention where both lenses are located on the real line with
-            r1 = a and r2 = -a.
-        e1 (array_like): Mass fraction of the first lens e1 = m1/(m1+m2). It
-            follows that e2 = 1 - e1.
+        w_points (array_like): Source positions in the complex plane.
         rho (float): Source radius in Einstein radii.
-        u (float, optional): Linear limb darkening coefficient. Defaults to 0..
+        u1 (float, optional): Linear limb darkening coefficient. Defaults to 0..
         npts_limb (int, optional): Initial number of points uniformly distributed
             on the source limb when computing the point source magnification.
             The final number of points depends on this value and `niter_limb`
@@ -157,85 +191,32 @@ def mag_binary(
         npts_ld (int, optional): Number of points at which the stellar
             brightness function is evaluated when computing the integrals P and
             Q defined in Dominik 1998. Defaults to 601.
+        **a (float): Half the separation between the first two lenses located on
+            the real line with $r_1 = a$ and $r_2 = -a$.
+        **r3 (float): The position of the third lens at arbitrary location in
+            the complex plane.
+        **e1 (array_like): Mass fraction of the first lens located at $r_1=a$.
+        **e2 (array_like): Mass fraction of the second lens located at $r_2=-a$.
+        **roots_itmax (int, optional): Number of iterations for the root solver.
+        **roots_compensated (bool, optional): Whether to use the compensated
+            arithmetic version of the Ehrlich-Aberth root solver.
 
     Returns:
         array_like: Magnification array.
     """
-    z, mask_z = images_point_source_binary(w_points, a, e1)
+    # Compute point images for a point source
+    z, mask_z = images_point_source(
+        w_points,
+        nlenses=nlenses,
+        roots_itmax=roots_itmax,
+        roots_compensated=roots_compensated,
+        **params
+    )
 
-    mask_test, mu_approx = _extended_source_test(z, mask_z, w_points, rho, a=a, e1=e1)
-
-    # Iterate over w_points and execute either the hexadecapole  approximation
-    # or the full extended source calculation. `vmap` cannot be used here because
-    # `lax.cond` executes both branches within vmap.
-    def body_fn(_, x):
-        w, c, _mu_approx = x
-        mag = lax.cond(
-            c,
-            lambda _: _mu_approx,
-            lambda w: mag_extended_source_binary(
-                w,
-                a,
-                e1,
-                rho,
-                u=u,
-                npts_limb=npts_limb,
-                niter_limb=niter_limb,
-                npts_ld=npts_ld,
-            ),
-            w,
-        )
-        return 0, mag
-
-    return lax.scan(body_fn, 0, [w_points, mask_test, mu_approx])[1]
-
-
-@partial(
-    jit, static_argnames=("npts_limb", "niter_limb", "npts_ld",),
-)
-def mag_triple(
-    w_points, a, r3, e1, e2, rho, u=0.0, npts_limb=300, niter_limb=8, npts_ld=601,
-):
-    """
-    Compute the triple lens magnification for an extended limb-darkned source 
-    at a set of points `w_points` in the source plane. Depending on the 
-    proximity of each point to a caustic, this function will call either 
-    `mag_extended_source_triple` or `mag_hexadecapole_triple`.
-
-    Args:
-        w_points (array_like): Center of the source in the lens plane.
-        a (float): Half the separation between the two lenses. We use the
-            convention where both lenses are located on the real line with
-            r1 = a and r2 = -a.
-        e1 (array_like): Mass fraction of the first lens e1 = m1/(m1+m2). It
-            follows that e2 = 1 - e1.
-        rho (float): Source radius in Einstein radii.
-        u (float, optional): Linear limb darkening coefficient. Defaults to 0..
-        npts_limb (int, optional): Initial number of points uniformly distributed
-            on the source limb when computing the point source magnification.
-            The final number of points depends on this value and `niter_limb`
-            because additional points are added iteratively in a geometric
-            fashion. This parameters determines the precision of the magnification
-            calculation (absent limb-darkening, in which case `npts_ld` is also
-            important). The default value should keep the relative error well
-            below 10^{-3} in all cases. Defaults to 300.
-        niter_limb (int, optional): Number of iterations to use for the point
-            source magnification evaluation on the source limb. At each
-            iteration we geometrically decrease the number of points starting
-            with `npts_limb` and ending with 2 for the final iteration. The new
-            points are placed where the gradient of the magnification is
-            largest. Deaults to 8.
-        npts_ld (int, optional): Number of points at which the stellar
-            brightness function is evaluated when computing the integrals P and
-            Q defined in Dominik 1998. Defaults to 601.
-
-    Returns:
-        array_like: Magnification array.
-    """
-    z, mask_z = images_point_source_triple(w_points, a, e1, e2, r3)
-
+    # Compute hexadecapole approximation at every point and a test where it is
+    # sufficient
     mask_test, mu_approx = _extended_source_test(
-        z, mask_z, w_points, rho, a=a, e1=e1, e2=e2, r3=r3
+        z, mask_z, w_points, rho, nlenses=nlenses, **params
     )
 
     # Iterate over w_points and execute either the hexadecapole  approximation
@@ -246,17 +227,16 @@ def mag_triple(
         mag = lax.cond(
             c,
             lambda _: _mu_approx,
-            lambda w: mag_extended_source_triple(
+            lambda w: mag_extended_source(
                 w,
-                a,
-                r3,
-                e1,
-                e2,
                 rho,
-                u=u,
+                u1=u1,
+                nlenses=nlenses,
                 npts_limb=npts_limb,
                 niter_limb=niter_limb,
                 npts_ld=npts_ld,
+                roots_itmax=roots_itmax,
+                roots_compensated=roots_compensated,
             ),
             w,
         )

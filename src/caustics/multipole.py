@@ -2,9 +2,11 @@
 Hexadecapole approximation for the extended source magnification. 
 """
 __all__ = [
-    "mag_hexadecapole_binary",
-    "mag_hexadecapole_triple",
+    "mag_hexadecapole",
 ]
+
+
+from functools import partial
 
 import numpy as np
 import jax.numpy as jnp
@@ -13,7 +15,7 @@ from jax.scipy.special import gammaln
 
 
 @jit
-def _mag_hexadecapole(W, mask_invalid_images, rho, u=0.0):
+def _mag_hexadecapole_cassan(W, images_mask, rho, u1=0.0):
     """
     Adapted from
     https://github.com/ArnaudCassan/microlensing/blob/master/microlensing/multipoles/multipoles.py
@@ -21,7 +23,7 @@ def _mag_hexadecapole(W, mask_invalid_images, rho, u=0.0):
     W2, W3, W4, W5, W6 = W
 
     # Gamma LD coefficients is related to u
-    Gamma = 2 * u / (3.0 - u)
+    Gamma = 2 * u1 / (3.0 - u1)
 
     # Compute a(p-n, n) factors from Q(p-n, n)
     akl = lambda mu, Qkl: mu * (jnp.conjugate(Qkl) + jnp.conjugate(W2) * Qkl)
@@ -206,14 +208,13 @@ def _mag_hexadecapole(W, mask_invalid_images, rho, u=0.0):
         )
     )
 
-    mu_ps = jnp.sum(mask_invalid_images * jnp.abs(mu0), axis=0)
+    mu_ps = jnp.sum(images_mask * jnp.abs(mu0), axis=0)
     mu_quad = jnp.sum(
-        mask_invalid_images
-        * jnp.abs(1.0 / 2.0 * mu2 * (1.0 - 1.0 / 5.0 * Gamma) * rho**2),
+        images_mask * jnp.abs(1.0 / 2.0 * mu2 * (1.0 - 1.0 / 5.0 * Gamma) * rho**2),
         axis=0,
     )
     mu_hex = jnp.sum(
-        mask_invalid_images
+        images_mask
         * jnp.abs(1.0 / 24.0 * mu4 * (1.0 - 11.0 / 35.0 * Gamma) * rho**4),
         axis=0,
     )
@@ -221,69 +222,30 @@ def _mag_hexadecapole(W, mask_invalid_images, rho, u=0.0):
     return mu_ps, mu_quad, mu_hex
 
 
-@jit
-def mag_hexadecapole_binary(z, mask_z, a, e1, rho, u=0.0):
-    """
-    Compute the approximate magnification of a limb-darkened extended source
-    star up to hexadecapole order following Cassan 2017's approach for
-    a binary lens.
-
-    Args:
-        z (array_like): Image positions.
-        mask_z (array_like): Mask with the same shape as `z`, evaluates to True
-            for real images.
-        a (float): Half the separation between the two lenses. We use the
-            convention where both lenses are located on the real line with
-            r1 = a and r2 = -a.
-        e1 (array_like): Mass fraction of the first lens e1 = m1/(m1+m2). It
-            follows that e2 = 1 - e1.
-        rho (float): Radius of the source disc in angular Einstein radii.
-        u (float, optional): Linear limb darkening coefficient. Defaults to 0..
-
-    Returns:
-        array_like: Magnification.
-    """
+@partial(jit, static_argnames=("nlenses"))
+def mag_hexadecapole(z, z_mask, rho, u1=0.0, nlenses=2, **params):
     # Wk from Cassan et. al. 2017
     factorial = lambda n: jnp.exp(gammaln(n + 1))
-    W = (
-        lambda k: (-1) ** (k - 1)
-        * factorial(k - 1)
-        * (e1 / (z - a) ** k + (1.0 - e1) / (z + a) ** k)
-    )
+
+    if nlenses == 1:
+        W = lambda k: (-1) ** (k - 1) * factorial(k - 1) * 1.0 / z**k
+    elif nlenses == 2:
+        a, e1 = params["a"], params["e1"]
+        W = (
+            lambda k: (-1) ** (k - 1)
+            * factorial(k - 1)
+            * (e1 / (z - a) ** k + (1.0 - e1) / (z + a) ** k)
+        )
+    elif nlenses == 3:
+        a, r3, e1, e2 = params["a"], params["r3"], params["e1"], params["e2"]
+        W = (
+            lambda k: (-1) ** (k - 1)
+            * factorial(k - 1)
+            * (e1 / (z - a) ** k + e2 / (z + a) ** k + (1.0 - e1 - e2) / (z - r3) ** k)
+        )
+    else:
+        raise ValueError("`nlenses` has to be set to be <= 3.")
+
     Ws = vmap(W)(jnp.arange(2, 7))
 
-    return _mag_hexadecapole(Ws, mask_z, rho, u=u)
-
-
-@jit
-def mag_hexadecapole_triple(z, mask_z, a, r3, e1, e2, rho, u=0.0):
-    """
-    Compute the approximate magnification of a limb-darkened extended source
-    star up to hexadecapole order following Cassan 2017's approach for
-    a triple lens.
-
-    Args:
-        z (array_like): Image positions.
-        mask_z (array_like): Mask with the same shape as `z`, evaluates to True
-            for real images.
-        a (float): Half the separation between the first two lenses located on
-            the real line with r1 = a and r2 = -a.
-        r3 (float): The position of the third lens.
-        e1 (array_like): Mass fraction of the first lens e1 = m1/(m1 + m2 + m3).
-        e2 (array_like): Mass fraction of the second lens e2 = m2/(m1 + m2 + m3).
-        rho (float): Radius of the source disc in angular Einstein radii.
-        u (float, optional): Linear limb darkening coefficient. Defaults to 0..
-
-    Returns:
-        array_like: Magnification.
-    """
-    # Wk from Cassan et. al. 2017
-    factorial = lambda n: jnp.exp(gammaln(n + 1))
-    W = (
-        lambda k: (-1) ** (k - 1)
-        * factorial(k - 1)
-        * (e1 / (z - a) ** k + e2 / (z + a) ** k + (1.0 - e1 - e2) / (z - r3) ** k)
-    )
-    Ws = vmap(W)(jnp.arange(2, 7))
-
-    return _mag_hexadecapole(Ws, mask_z, rho, u=u)
+    return _mag_hexadecapole_cassan(Ws, z_mask, rho, u1=u1)

@@ -8,8 +8,7 @@ from jax.config import config
 from jax.test_util import check_grads
 
 from caustics import (
-    mag_point_source_binary,
-    mag_point_source_triple,
+    mag_point_source,
 )
 
 import VBBinaryLensing
@@ -42,7 +41,7 @@ def test_mag_point_source_binary(get_data):
     xgrid, ygrid = jnp.meshgrid(x, y)
     wgrid = xgrid + 1j * ygrid
 
-    mag = mag_point_source_binary(wgrid, a, e1)
+    mag = mag_point_source(wgrid, nlenses=2, a=a, e1=e1)
 
     # Compare to VBBinaryLensing
     mag_vbb = np.zeros(wgrid.shape)
@@ -62,5 +61,5 @@ def test_mag_point_source_grad(get_data):
     a, e1, _, _ = get_data
 
     # Check gradient of mag. with respect to lens separation
-    fn = lambda a: mag_point_source_binary(jnp.array([0.0 + 0.1j])[0], a, e1)
+    fn = lambda a: mag_point_source(jnp.array([0.0 + 0.1j])[0], nlenses=2, a=a, e1=e1)
     check_grads(fn, (a,), 2)

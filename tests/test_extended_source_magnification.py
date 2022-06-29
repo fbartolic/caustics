@@ -18,15 +18,15 @@ from caustics.extended_source_magnification import (
     _connection_condition,
 )
 from caustics import (
-    critical_and_caustic_curves_binary,
-    critical_and_caustic_curves_triple,
-    mag_extended_source_binary,
-    mag_extended_source_triple,
+    critical_and_caustic_curves,
+    mag_extended_source,
 )
 
+config.update("jax_platform_name", "cpu")
 config.update("jax_enable_x64", True)
 
 from MulensModel.binarylensimports import _adaptive_contouring_linear
+
 
 def mag_adaptive_cont(w_center, rho, a, e1, u=0.1, eps=1e-04, eps_ld=1e-04):
     x_cm = (e1 - (1.0 - e1)) * a
@@ -40,7 +40,6 @@ def mag_adaptive_cont(w_center, rho, a, e1, u=0.1, eps=1e-04, eps_ld=1e-04):
         eps,
         eps_ld,
     )
-
 
 
 def test_images_of_source_limb():
@@ -97,8 +96,8 @@ def test_get_segments():
     a, e1, e2, r3 = 0.698, 0.02809, 0.9687, -0.0197 - 0.95087j
     rho = 1e-01
 
-    critical_curves, caustic_curves = critical_and_caustic_curves_triple(
-        a, r3, e1, e2, npts=10
+    critical_curves, caustic_curves = critical_and_caustic_curves(
+        npts=10, nlenses=3, a=a, e1=e1, e2=e2, r3=r3
     )
 
     def f(w):
@@ -145,8 +144,8 @@ def test_get_segments():
 def test_get_contours(rho):
     a, e1, e2, r3 = 0.698, 0.02809, 0.9687, -0.0197 - 0.95087j
 
-    critical_curves, caustic_curves = critical_and_caustic_curves_triple(
-        a, r3, e1, e2, npts=10
+    critical_curves, caustic_curves = critical_and_caustic_curves(
+        nlenses=3, npts=10, a=a, e1=e1, e2=e2, r3=r3, rho=rho
     )
 
     key = random.PRNGKey(42)
@@ -208,7 +207,9 @@ def test_mag_extended_source_binary(rho, max_err=1e-03):
         0.45,
         0.8,
     )
-    critical_curves, caustic_curves = critical_and_caustic_curves_binary(a, e1, npts=10)
+    critical_curves, caustic_curves = critical_and_caustic_curves(
+        npts=10, nlenses=2, a=a, e1=e1
+    )
 
     key = random.PRNGKey(42)
     key, subkey1, subkey2 = random.split(key, num=3)
@@ -223,14 +224,15 @@ def test_mag_extended_source_binary(rho, max_err=1e-03):
 
     # Compute the magnification with `caustics` and adaptive contouring
     mags = vmap(
-        lambda w: mag_extended_source_binary(
+        lambda w: mag_extended_source(
             w,
-            a,
-            e1,
             rho,
             u=0.0,
+            nlenses=2,
             npts_limb=250,
             niter_limb=8,
+            a=a,
+            e1=e1,
         )
     )(w_test)
 
@@ -250,7 +252,9 @@ def test_mag_extended_source_binary_limb_darkening(rho, max_err=1e-03):
         0.45,
         0.8,
     )
-    critical_curves, caustic_curves = critical_and_caustic_curves_binary(a, e1, npts=10)
+    critical_curves, caustic_curves = critical_and_caustic_curves(
+        npts=10, nlenses=2, a=a, e1=e1
+    )
 
     key = random.PRNGKey(42)
     key, subkey1, subkey2 = random.split(key, num=3)
@@ -265,14 +269,15 @@ def test_mag_extended_source_binary_limb_darkening(rho, max_err=1e-03):
 
     # Compute the magnification with `caustics` and adaptive contouring
     mags = vmap(
-        lambda w: mag_extended_source_binary(
+        lambda w: mag_extended_source(
             w,
-            a,
-            e1,
             rho,
             u=0.25,
+            nlenses=2,
             npts_limb=250,
             niter_limb=8,
+            a=a,
+            e1=e1,
         )
     )(w_test)
 
@@ -291,11 +296,13 @@ def test_grad_mag_extended_source_binary(rho=1e-02):
         0.45,
         0.8,
     )
-    critical_curves, caustic_curves = critical_and_caustic_curves_binary(a, e1, npts=1)
+    critical_curves, caustic_curves = critical_and_caustic_curves(
+        npts=1, nlenses=2, a=a, e1=e1
+    )
     w = caustic_curves[0]
 
-    f = lambda a: mag_extended_source_binary(w, a, e1, rho, u=0.2)
+    f = lambda a: mag_extended_source(w, rho, u=0.2, nlenses=2, a=a, e1=e1)
     check_grads(f, (a,), 1, rtol=5e-03)
 
-    f = lambda rho: mag_extended_source_binary(w, a, e1, rho, u=0.2)
+    f = lambda rho: mag_extended_source(w, rho, u=0.2, a=a, e1=e1)
     check_grads(f, (rho,), 1, rtol=5e-03)
