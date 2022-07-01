@@ -15,10 +15,13 @@ from jax import jit, vmap, lax, random
 from . import (
     images_point_source,
 )
+from .integrate import (
+    _integrate_unif,
+    _integrate_ld,
+)
 from .utils import *
 
 from .point_source_magnification import (
-    lens_eq,
     lens_eq_det_jac,
 )
 
@@ -43,19 +46,23 @@ def _images_of_source_limb(
     roots_compensated=False,
     **params,
 ):
+    def images_and_mag(theta):
+        z, z_mask = images_point_source(
+            rho * jnp.exp(1j * theta) + w_center,
+            nlenses=nlenses,
+            roots_itmax=roots_itmax,
+            roots_compensated=roots_compensated,
+            **params,
+        )
+        det = lens_eq_det_jac(z, nlenses=nlenses, **params)
+        parity = jnp.sign(det)
+        mag = jnp.sum((1.0 / jnp.abs(det)) * z_mask, axis=0)
+        return z, z_mask, mag, parity
+
     # Initial sampling on the source limb
     theta = jnp.linspace(-np.pi, np.pi, npts_init - 1, endpoint=False)
     theta = jnp.pad(theta, (0, 1), constant_values=np.pi - 1e-05)
-    images, mask_images = images_point_source(
-        rho * jnp.exp(1j * theta) + w_center,
-        nlenses=nlenses,
-        roots_itmax=roots_itmax,
-        roots_compensated=roots_compensated,
-        **params,
-    )
-    det = lens_eq_det_jac(images, nlenses=nlenses, **params)
-    parity = jnp.sign(det)
-    mag = jnp.sum((1.0 / jnp.abs(det)) * mask_images, axis=0)
+    z, z_mask, mag, parity = images_and_mag(theta)
 
     # Refine sampling by placing geometrically fewer points each iteration
     # in the regions where the magnification gradient is largest
@@ -66,42 +73,26 @@ def _images_of_source_limb(
         # Resample theta
         delta_mag = jnp.gradient(mag)
         idcs_maxdelta = jnp.argsort(jnp.abs(delta_mag))[::-1][:_npts]
-
         theta_patch = 0.5 * (theta[idcs_maxdelta] + theta[idcs_maxdelta + 1])
 
-        # Make sure that there are no exact duplicate values in `theta_patch`
-        # and no common values with `theta`
-        mask_duplicate = jnp.ones(len(theta_patch), dtype=bool)
-        mask_duplicate = mask_duplicate.at[
-            jnp.unique(theta_patch, return_index=True, size=len(theta_patch))[1]
-        ].set(False)
-        mask_common = jnp.isin(theta_patch, theta, assume_unique=True)
-        mask = jnp.logical_or(mask_duplicate, mask_common)
-        theta_patch += mask * random.uniform(
-            key, theta_patch.shape, maxval=1e-05
+        # Add small perturbation to avoid situations where there are duplicate values
+        theta_patch += random.uniform(
+            key, theta_patch.shape, maxval=1e-06
         )  # small perturbation
 
-        images_patch, mask_images_patch = images_point_source(
-            rho * jnp.exp(1j * theta_patch) + w_center,
-            nlenses=nlenses,
-            roots_itmax=roots_itmax,
-            roots_compensated=roots_compensated,
-            **params,
-        )
-        det_patch = lens_eq_det_jac(images_patch, nlenses=nlenses, **params)
-        mag_patch = jnp.sum((1.0 / jnp.abs(det_patch)) * mask_images_patch, axis=0)
+        z_patch, z_mask_patch, mag_patch, parity_patch = images_and_mag(theta_patch)
 
+        # Add to previous values and sort
         theta = jnp.concatenate([theta, theta_patch])
         sorted_idcs = jnp.argsort(theta)
         theta = theta[sorted_idcs]
 
         mag = jnp.concatenate([mag, mag_patch])[sorted_idcs]
-        images = jnp.hstack([images, images_patch])[:, sorted_idcs]
-        mask_images = jnp.hstack([mask_images, mask_images_patch])[:, sorted_idcs]
-        det = jnp.hstack([det, det_patch])[:, sorted_idcs]
-        parity = jnp.sign(det)
+        z = jnp.hstack([z, z_patch])[:, sorted_idcs]
+        z_mask = jnp.hstack([z_mask, z_mask_patch])[:, sorted_idcs]
+        parity = jnp.hstack([parity, parity_patch])[:, sorted_idcs]
 
-    return images, mask_images, parity
+    return z, z_mask, parity
 
 
 @partial(jit, backend="cpu")
@@ -147,7 +138,7 @@ def _linear_sum_assignment(a, b):
 
 
 @partial(jit, backend="cpu")  # this function has to be executed on the CPU
-def _permute_images(images, mask_solutions, parity):
+def _permute_images(z, z_mask, parity):
     """
     Sequantially permute the images corresponding to points on the source limb
     starting with the first point such that each point source image is assigned
@@ -155,7 +146,7 @@ def _permute_images(images, mask_solutions, parity):
     and false images, false images are set to zero after the permutation
     operation.
     """
-    segments = jnp.stack([images, mask_solutions, parity])
+    segments = jnp.stack([z, z_mask, parity])
 
     def apply_linear_sum_assignment(carry, array_slice):
         z, mask_sols, parity = array_slice
@@ -237,15 +228,15 @@ def _process_segments(segments, nr_of_segments=20):
 
 
 @partial(jit, static_argnames=("nlenses"))
-def _get_segments(images, images_mask, images_parity, nlenses=2):
+def _get_segments(z, z_mask, z_parity, nlenses=2):
     """
     Given the raw images corresponding to a sequence of points on the source
     limb, return a collection of contour segments some open and some closed.
 
     Args:
         images (array_like): Images corresponding to points on the source limb.
-        images_mask (array_like): Mask which indicated which images are real.
-        images_parity (array_like): Parity of each image.
+        z_mask (array_like): Mask which indicated which images are real.
+        z_parity (array_like): Parity of each image.
         nlenses (int, optional): _description_. Defaults to 2.
 
     Returns:
@@ -258,12 +249,12 @@ def _get_segments(images, images_mask, images_parity, nlenses=2):
     nr_of_segments = 2 * n_images
 
     # Untangle the images
-    images, images_mask, parity = _permute_images(images, images_mask, images_parity)
+    z, z_mask, z_parity = _permute_images(z, z_mask, z_parity)
 
     # Apply mask and bundle the images and parity into a single array
-    images = (images * images_mask).T
-    parity = (parity * images_mask).T
-    segments = jnp.stack([images, parity])
+    z = (z * z_mask).T
+    z_parity = (z_parity * z_mask).T
+    segments = jnp.stack([z, z_parity])
     segments = jnp.moveaxis(segments, 0, 1)
 
     # Expand size of the array to make room for splitted segments in case there
@@ -770,135 +761,13 @@ def _get_contours(
     return contours, parity, tail_idcs
 
 
-@jit
-def _integrate_unif(
-    rho,
-    contours,
-    parity,
-    tail_idcs,
-):
-    # Select k and (k + 1)th elements
-    contours_k = contours
-    contours_kp1 = jnp.pad(contours[:, 1:], ((0, 0), (0, 1)))
-    contours_k = vmap(lambda idx, contour: contour.at[idx].set(0.0))(
-        tail_idcs, contours_k
-    )
-
-    # Compute the integral using the midpoint rule
-    x_k = jnp.real(contours_k)
-    y_k = jnp.imag(contours_k)
-
-    x_kp1 = jnp.real(contours_kp1)
-    y_kp1 = jnp.imag(contours_kp1)
-
-    delta_x = x_kp1 - x_k
-    delta_y = y_kp1 - y_k
-
-    x_mid = 0.5 * (x_k + x_kp1)
-    y_mid = 0.5 * (y_k + y_kp1)
-
-    I1 = 0.5 * x_mid * delta_y
-    I2 = -0.5 * y_mid * delta_x
-
-    mag = jnp.sum(I1 + I2, axis=1) / (np.pi * rho**2)
-
-    # sum magnifications for each image, taking into account the parity
-    # (per image)
-    return jnp.abs(jnp.sum(mag * parity))
-
-
-@partial(jit, static_argnames=("nlenses"))
-def _brightness_profile(z, rho, w_center, u1=0.0, nlenses=2, **params):
-    w = lens_eq(z, nlenses=nlenses, **params)
-    r = jnp.abs(w - w_center) / rho
-
-    def safe_for_grad_sqrt(x):
-        return jnp.sqrt(jnp.where(x > 0.0, x, 0.0))
-
-    # See Dominik 1998 for details
-    B_r = jnp.where(
-        r <= 1.0,
-        1 + safe_for_grad_sqrt(1 - r**2),
-        1 - safe_for_grad_sqrt(1 - 1.0 / r**2),
-    )
-
-    I = 3.0 / (3.0 - u1) * (u1 * B_r + 1.0 - 2.0 * u1)
-    return I
-
-
-@partial(jit, static_argnames=("nlenses", "npts"))
-def _integrate_ld(
-    w_center, rho, contours, parity, tail_idcs, u1=0.0, nlenses=2, npts=201, **params
-):
-    # Make sure that npts is odd
-    #    npts = jnp.where(npts % 2 == 0, npts + 1, npts)
-
-    def P(x0, y0, xl, yl):
-        """Integrate from x0 to xl for each yl."""
-        # Construct grid in z2 and evaluate the brightness profile at each point
-        y = jnp.linspace(y0 * jnp.ones_like(xl), yl, npts)
-
-        integrands = _brightness_profile(
-            xl + 1j * y, rho, w_center, u1=u1, nlenses=nlenses, **params
-        )
-        I = simpson_quadrature(y, integrands)
-        return -0.5 * I
-
-    def Q(x0, y0, xl, yl):
-        """Integrate from y0 to yl for each xl."""
-        # Construct grid in z1 and evaluate the brightness profile at each point
-        x = jnp.linspace(x0 * jnp.ones_like(xl), xl, npts)
-
-        integrands = _brightness_profile(
-            x + 1j * yl, rho, w_center, u1=u1, nlenses=nlenses, **params
-        )
-        I = simpson_quadrature(x, integrands)
-        return 0.5 * I
-
-    # We choose the centroid of each contour to be lower limit for the P and Q
-    # integrals
-    z0 = vmap(lambda idx, contour: contour.sum() / (idx + 1))(tail_idcs, contours)
-    x0, y0 = jnp.real(z0), jnp.imag(z0)
-
-    # Select k and (k + 1)th elements
-    contours_k = contours
-    contours_kp1 = jnp.pad(contours[:, 1:], ((0, 0), (0, 1)))
-    contours_k = vmap(lambda idx, contour: contour.at[idx].set(0.0))(
-        tail_idcs, contours_k
-    )
-
-    # Compute the integral using the midpoint rule
-    x_k = jnp.real(contours_k)
-    y_k = jnp.imag(contours_k)
-
-    x_kp1 = jnp.real(contours_kp1)
-    y_kp1 = jnp.imag(contours_kp1)
-
-    delta_x = x_kp1 - x_k
-    delta_y = y_kp1 - y_k
-
-    x_mid = 0.5 * (x_k + x_kp1)
-    y_mid = 0.5 * (y_k + y_kp1)
-
-    Pmid = vmap(P)(x0, y0, x_mid, y_mid)
-    Qmid = vmap(Q)(x0, y0, x_mid, y_mid)
-
-    I1 = Pmid * delta_x
-    I2 = Qmid * delta_y
-
-    mag = jnp.sum(I1 + I2, axis=1) / (np.pi * rho**2)
-
-    # sum magnifications for each image, taking into account the parity of each
-    # image
-    return jnp.abs(jnp.sum(mag * parity))
-
-
 @partial(
     jit,
     static_argnames=(
         "nlenses",
         "npts_limb",
         "niter_limb",
+        "limb_darkening",
         "npts_ld",
         "roots_itmax",
         "roots_compensated",
@@ -907,11 +776,12 @@ def _integrate_ld(
 def mag_extended_source(
     w,
     rho,
-    u1=0.0,
     nlenses=2,
     npts_limb=300,
     niter_limb=8,
-    npts_ld=601,
+    limb_darkening=False,
+    u1=0.0,
+    npts_ld=50,
     roots_itmax=2500,
     roots_compensated=False,
     **params,
@@ -923,7 +793,6 @@ def mag_extended_source(
     Args:
         w (array_like): Source position in the complex plane.
         rho (float): Source radius in Einstein radii.
-        u1 (float, optional): Linear limb darkening coefficient. Defaults to 0..
         npts_limb (int, optional): Initial number of points uniformly distributed
             on the source limb when computing the point source magnification.
             The final number of points depends on this value and `niter_limb`
@@ -938,9 +807,13 @@ def mag_extended_source(
             with `npts_limb` and ending with 2 for the final iteration. The new
             points are placed where the gradient of the magnification is
             largest. Deaults to 8.
-        npts_ld (int, optional): Number of points at which the stellar
-            brightness function is evaluated when computing the integrals P and
-            Q defined in Dominik 1998. Defaults to 601.
+        limb_darkening (bool, optional): If True, compute the magnification of
+            a limb-darkened source. If limb_darkening is enabled the u1 linear
+            limb-darkening coefficient needs to be specified. Defaults to False.
+        u1 (float, optional): Linear limb darkening coefficient. Defaults to 0..
+        npts_ld (int, optional): Number of points at which the stellar brightness
+            function is evaluated when computing the integrals P and Q from
+            Dominik 1998. Defaults to 50.
         **a (float): Half the separation between the first two lenses located on
             the real line with $r_1 = a$ and $r_2 = -a$.
         **r3 (float): The position of the third lens at arbitrary location in
@@ -954,7 +827,7 @@ def mag_extended_source(
     Returns:
         float: Total magnification.
     """
-    images, images_mask, images_parity = _images_of_source_limb(
+    z, z_mask, z_parity = _images_of_source_limb(
         w,
         rho,
         nlenses=nlenses,
@@ -967,16 +840,14 @@ def mag_extended_source(
 
     if nlenses == 1:
         # Per image parity
-        parity = images_parity[:, 0]
+        parity = z_parity[:, 0]
 
         # Last point is equal to first point
-        contours = jnp.hstack([images, images[:, 0][:, None]])
-        tail_idcs = jnp.array([images.shape[1] - 1, images.shape[1] - 1])
+        contours = jnp.hstack([z, z[:, 0][:, None]])
+        tail_idcs = jnp.array([z.shape[1] - 1, z.shape[1] - 1])
 
     elif nlenses == 2:
-        segments, cond_closed = _get_segments(
-            images, images_mask, images_parity, nlenses=2
-        )
+        segments, cond_closed = _get_segments(z, z_mask, z_parity, nlenses=2)
         contours, parity, tail_idcs = _get_contours(
             segments,
             cond_closed,
@@ -985,9 +856,7 @@ def mag_extended_source(
         )
 
     elif nlenses == 3:
-        segments, cond_closed = _get_segments(
-            images, images_mask, images_parity, nlenses=3
-        )
+        segments, cond_closed = _get_segments(z, z_mask, z_parity, nlenses=3)
         contours, parity, tail_idcs = _get_contours(
             segments,
             cond_closed,
@@ -997,15 +866,8 @@ def mag_extended_source(
     else:
         raise ValueError("`nlenses` has to be set to be <= 3.")
 
-    mag = lax.cond(
-        u1 == 0.0,
-        lambda: _integrate_unif(
-            rho,
-            contours,
-            parity,
-            tail_idcs,
-        ),
-        lambda: _integrate_ld(
+    if limb_darkening:
+        return _integrate_ld(
             w,
             rho,
             contours,
@@ -1015,7 +877,12 @@ def mag_extended_source(
             nlenses=nlenses,
             npts=npts_ld,
             **params,
-        ),
-    )
+        )
 
-    return mag
+    else:
+        return _integrate_unif(
+            rho,
+            contours,
+            parity,
+            tail_idcs,
+        )

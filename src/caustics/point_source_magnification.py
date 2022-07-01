@@ -1589,7 +1589,7 @@ def lens_eq_det_jac(z, nlenses=2, **params):
         raise ValueError("`nlenses` has to be set to be <= 3.")
 
 
-@partial(jit, static_argnames=("nlenses"))
+@partial(jit, static_argnames=("npts", "nlenses"))
 def critical_and_caustic_curves(npts=200, nlenses=2, **params):
     phi = jnp.linspace(-np.pi, np.pi, npts)
 
@@ -1608,6 +1608,7 @@ def critical_and_caustic_curves(npts=200, nlenses=2, **params):
         coeffs = jnp.moveaxis(_poly_coeffs_critical_triple(phi, a, r3, e1, e2), 0, -1)
         critical_curves = poly_roots(coeffs).reshape(-1)
         caustic_curves = lens_eq(critical_curves, nlenses=3, **params)
+        return critical_curves, caustic_curves
 
     else:
         raise ValueError("`nlenses` has to be set to be <= 3.")

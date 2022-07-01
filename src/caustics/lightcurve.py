@@ -49,7 +49,7 @@ def _extended_source_test(
     mu_multi = mu_ps + mu_quad + mu_hex
 
     if nlenses == 1:
-        mask_valid = jnp.abs(w) > 2 * rho
+        mask_valid = jnp.abs(w) > 2.0 * rho
         return mask_valid, mu_multi
 
     elif nlenses == 2:
@@ -132,6 +132,7 @@ def _extended_source_test(
         "nlenses",
         "npts_limb",
         "niter_limb",
+        "limb_darkening",
         "npts_ld",
         "roots_itmax",
         "roots_compensated",
@@ -140,11 +141,12 @@ def _extended_source_test(
 def mag(
     w_points,
     rho,
-    u1=0.0,
     nlenses=2,
     npts_limb=300,
     niter_limb=8,
-    npts_ld=601,
+    limb_darkening=False,
+    u1=0.0,
+    npts_ld=50,
     roots_itmax=2500,
     roots_compensated=False,
     **params
@@ -173,7 +175,6 @@ def mag(
     Args:
         w_points (array_like): Source positions in the complex plane.
         rho (float): Source radius in Einstein radii.
-        u1 (float, optional): Linear limb darkening coefficient. Defaults to 0..
         npts_limb (int, optional): Initial number of points uniformly distributed
             on the source limb when computing the point source magnification.
             The final number of points depends on this value and `niter_limb`
@@ -188,9 +189,14 @@ def mag(
             with `npts_limb` and ending with 2 for the final iteration. The new
             points are placed where the gradient of the magnification is
             largest. Deaults to 8.
-        npts_ld (int, optional): Number of points at which the stellar
-            brightness function is evaluated when computing the integrals P and
-            Q defined in Dominik 1998. Defaults to 601.
+        limb_darkening (bool, optional): If True, compute the magnification of
+            a limb-darkened source. If limb_darkening is enabled the u1 linear
+            limb-darkening coefficient needs to be specified. Defaults to False.
+        u1 (float, optional): Linear limb darkening coefficient. Defaults to 0..
+        npts_ld (int, optional): Number of points at which the stellar brightness
+            function is evaluated when computing the integrals P and Q from
+            Dominik 1998. Defaults to 50.
+
         **a (float): Half the separation between the first two lenses located on
             the real line with $r_1 = a$ and $r_2 = -a$.
         **r3 (float): The position of the third lens at arbitrary location in
@@ -216,28 +222,31 @@ def mag(
     # Compute hexadecapole approximation at every point and a test where it is
     # sufficient
     mask_test, mu_approx = _extended_source_test(
-        z, mask_z, w_points, rho, nlenses=nlenses, **params
+        z, mask_z, w_points, rho, nlenses=nlenses, u1=u1, **params
+    )
+
+    mag_full = lambda w: mag_extended_source(
+        w,
+        rho,
+        nlenses=nlenses,
+        npts_limb=npts_limb,
+        niter_limb=niter_limb,
+        limb_darkening=limb_darkening,
+        u1=u1,
+        npts_ld=npts_ld,
+        roots_itmax=roots_itmax,
+        roots_compensated=roots_compensated,
     )
 
     # Iterate over w_points and execute either the hexadecapole  approximation
     # or the full extended source calculation. `vmap` cannot be used here because
     # `lax.cond` executes both branches within vmap.
     def body_fn(_, x):
-        w, c, _mu_approx = x
+        w, c, m_approx = x
         mag = lax.cond(
             c,
-            lambda _: _mu_approx,
-            lambda w: mag_extended_source(
-                w,
-                rho,
-                u1=u1,
-                nlenses=nlenses,
-                npts_limb=npts_limb,
-                niter_limb=niter_limb,
-                npts_ld=npts_ld,
-                roots_itmax=roots_itmax,
-                roots_compensated=roots_compensated,
-            ),
+            lambda _: m_approx,
+            mag_full,
             w,
         )
         return 0, mag
