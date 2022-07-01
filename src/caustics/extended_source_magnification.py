@@ -55,14 +55,14 @@ def _images_of_source_limb(
             **params,
         )
         det = lens_eq_det_jac(z, nlenses=nlenses, **params)
-        parity = jnp.sign(det)
+        z_parity = jnp.sign(det)
         mag = jnp.sum((1.0 / jnp.abs(det)) * z_mask, axis=0)
-        return z, z_mask, mag, parity
+        return z, z_mask, mag, z_parity
 
     # Initial sampling on the source limb
     theta = jnp.linspace(-np.pi, np.pi, npts_init - 1, endpoint=False)
     theta = jnp.pad(theta, (0, 1), constant_values=np.pi - 1e-05)
-    z, z_mask, mag, parity = images_and_mag(theta)
+    z, z_mask, mag, z_parity = images_and_mag(theta)
 
     # Refine sampling by placing geometrically fewer points each iteration
     # in the regions where the magnification gradient is largest
@@ -80,7 +80,7 @@ def _images_of_source_limb(
             key, theta_patch.shape, maxval=1e-06
         )  # small perturbation
 
-        z_patch, z_mask_patch, mag_patch, parity_patch = images_and_mag(theta_patch)
+        z_patch, z_mask_patch, mag_patch, z_parity_patch = images_and_mag(theta_patch)
 
         # Add to previous values and sort
         theta = jnp.concatenate([theta, theta_patch])
@@ -90,9 +90,9 @@ def _images_of_source_limb(
         mag = jnp.concatenate([mag, mag_patch])[sorted_idcs]
         z = jnp.hstack([z, z_patch])[:, sorted_idcs]
         z_mask = jnp.hstack([z_mask, z_mask_patch])[:, sorted_idcs]
-        parity = jnp.hstack([parity, parity_patch])[:, sorted_idcs]
+        z_parity = jnp.hstack([z_parity, z_parity_patch])[:, sorted_idcs]
 
-    return z, z_mask, parity
+    return z, z_mask, z_parity
 
 
 @partial(jit, backend="cpu")

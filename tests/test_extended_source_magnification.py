@@ -25,7 +25,6 @@ from caustics import (
 config.update("jax_platform_name", "cpu")
 config.update("jax_enable_x64", True)
 
-from MulensModel.pointlens import PointLens
 import MulensModel as mm
 
 params = mm.ModelParameters({"t_0": 200.0, "u_0": 0.1, "t_E": 3.0, "rho": 0.1})
