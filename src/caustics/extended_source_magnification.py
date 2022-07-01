@@ -19,7 +19,14 @@ from .integrate import (
     _integrate_unif,
     _integrate_ld,
 )
-from .utils import *
+from .utils import (
+    central_finite_difference,
+    first_nonzero,
+    first_zero,
+    last_nonzero,
+    index_update,
+    sparse_argsort,
+)
 
 from .point_source_magnification import (
     lens_eq_det_jac,
@@ -70,9 +77,11 @@ def _images_of_source_limb(
     key = random.PRNGKey(42)
 
     for _npts in npts_list:
+        # Evaluate finit difference gradient of the magnification w.r.t. theta
+        mag_grad = central_finite_difference(theta, mag)
+
         # Resample theta
-        delta_mag = jnp.gradient(mag)
-        idcs_maxdelta = jnp.argsort(jnp.abs(delta_mag))[::-1][:_npts]
+        idcs_maxdelta = jnp.argsort(jnp.abs(mag_grad))[::-1][:_npts]
         theta_patch = 0.5 * (theta[idcs_maxdelta] + theta[idcs_maxdelta + 1])
 
         # Add small perturbation to avoid situations where there are duplicate values
