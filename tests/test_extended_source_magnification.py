@@ -76,7 +76,7 @@ def test_images_of_source_limb():
 @pytest.mark.parametrize("rho", [1.0, 1e-01, 1e-02, 1e-03])
 def test_mag_extended_source_single_uniform(rho, rtol=1e-03):
     npts_limb = 100
-    niter_limb = 20
+    niter_limb = 15
     w_points = jnp.linspace(0.0, 3.0 * rho, 11)
 
     mags = vmap(
@@ -111,9 +111,9 @@ def test_mag_extended_source_single_uniform(rho, rtol=1e-03):
 
 @pytest.mark.parametrize("rho", [1.0, 1e-01, 1e-02])
 def test_mag_extended_source_single_ld(rho, rtol=1e-03):
+    npts_limb = 200
+    niter_limb = 15
     npts_ld = 150
-    npts_limb = 150
-    niter_limb = 20
     u1 = 0.25
     w_points = jnp.linspace(0.0, 3.0 * rho, 11)
 

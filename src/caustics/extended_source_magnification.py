@@ -40,8 +40,8 @@ def _images_of_source_limb(
     w_center,
     rho,
     nlenses=2,
-    npts_init=500,
-    niter=2,
+    npts_init=150,
+    niter=15,
     roots_itmax=2500,
     roots_compensated=False,
     **params,
@@ -95,7 +95,7 @@ def _images_of_source_limb(
     return z, z_mask, z_parity
 
 
-@partial(jit, backend="cpu")
+@jit
 def _linear_sum_assignment(a, b):
     """
     Given 1D arrays a and b, return the indices which specify the permutation of
@@ -137,7 +137,7 @@ def _linear_sum_assignment(a, b):
     return res
 
 
-@partial(jit, backend="cpu")  # this function has to be executed on the CPU
+@jit
 def _permute_images(z, z_mask, parity):
     """
     Sequantially permute the images corresponding to points on the source limb
@@ -777,11 +777,11 @@ def mag_extended_source(
     w,
     rho,
     nlenses=2,
-    npts_limb=300,
-    niter_limb=8,
+    npts_limb=150,
+    niter_limb=15,
     limb_darkening=False,
     u1=0.0,
-    npts_ld=50,
+    npts_ld=100,
     roots_itmax=2500,
     roots_compensated=False,
     **params,
