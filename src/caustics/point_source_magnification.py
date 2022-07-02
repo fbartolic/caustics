@@ -1619,7 +1619,7 @@ def images_point_source(
     w, nlenses=2, roots_itmax=2500, roots_compensated=False, **params
 ):
     if nlenses == 1:
-        w_abs_sq = jnp.abs(w) ** 2
+        w_abs_sq = w.real ** 2 + w.imag ** 2
         w_bar = jnp.conjugate(w)
         #  Compute the image locations using the quadratic formula
         z1 = (w_abs_sq + jnp.sqrt(w_abs_sq**2 + 4 * w_abs_sq)) / (2 * w_bar)

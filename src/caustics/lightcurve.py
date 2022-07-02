@@ -11,7 +11,7 @@ from functools import partial
 
 import numpy as np
 import jax.numpy as jnp
-from jax import jit, vmap, lax
+from jax import jit, vmap, lax, checkpoint
 
 from . import (
     images_point_source,
@@ -25,6 +25,7 @@ from caustics.multipole import (
 from .utils import *
 
 
+@checkpoint
 @partial(jit, static_argnames=("nlenses"))
 def _extended_source_test(
     z,
@@ -49,7 +50,7 @@ def _extended_source_test(
     mu_multi = mu_ps + mu_quad + mu_hex
 
     if nlenses == 1:
-        mask_valid = jnp.abs(w) > 2.0 * rho
+        mask_valid = w.real**2 + w.imag**2 > 4.0 * rho**2
         return mask_valid, mu_multi
 
     elif nlenses == 2:

@@ -10,10 +10,11 @@ from functools import partial
 
 import numpy as np
 import jax.numpy as jnp
-from jax import jit, vmap
+from jax import jit, vmap, checkpoint
 from jax.scipy.special import gammaln
 
 
+@checkpoint
 @jit
 def _mag_hexadecapole_cassan(W, images_mask, rho, u1=0.0):
     """
