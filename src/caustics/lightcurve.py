@@ -25,7 +25,6 @@ from caustics.multipole import (
 from .utils import *
 
 
-@checkpoint
 @partial(jit, static_argnames=("nlenses"))
 def _extended_source_test(
     z,
@@ -242,14 +241,12 @@ def mag(
     # Iterate over w_points and execute either the hexadecapole  approximation
     # or the full extended source calculation. `vmap` cannot be used here because
     # `lax.cond` executes both branches within vmap.
-    def body_fn(_, x):
-        w, c, m_approx = x
-        mag = lax.cond(
+    return lax.map(
+        lambda w, c, m: lax.cond(
             c,
-            lambda _: m_approx,
+            lambda _: m,
             mag_full,
             w,
-        )
-        return 0, mag
-
-    return lax.scan(body_fn, 0, [w_points, mask_test, mu_approx])[1]
+        ),
+        [w_points, mask_test, mu_approx],
+    )
