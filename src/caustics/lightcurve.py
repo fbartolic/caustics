@@ -242,11 +242,12 @@ def mag(
     # or the full extended source calculation. `vmap` cannot be used here because
     # `lax.cond` executes both branches within vmap.
     return lax.map(
-        lambda w, c, m: lax.cond(
-            c,
-            lambda _: m,
+        lambda xs: lax.cond(
+            xs[0],
+            lambda _: xs[1],
             mag_full,
-            w,
+            xs[2],
         ),
-        [w_points, mask_test, mu_approx],
+        [mask_test, mu_approx, w_points],
+        #        jnp.stack([mask_test, mu_approx,  w_points]).T,
     )
