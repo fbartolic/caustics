@@ -7,38 +7,27 @@ from functools import partial
 
 import numpy as np
 import jax.numpy as jnp
-from jax import jit, vmap, checkpoint
-
-from scipy.special import roots_legendre
+from jax import jit, vmap
 
 from .utils import *
 
-from .point_source_magnification import (
-    lens_eq,
-)
+from .point_source_magnification import lens_eq
+from .utils import trapz_zero_avoiding
 
 
-@checkpoint
+@partial(jit, static_argnums=(0,), static_argnames=("n"))
+def _integrate_gauss_legendre(f, a, b, n=100):
+    pts, weights = np.polynomial.legendre.leggauss(n)
+    pts_rescaled = 0.5 * (b - a) * pts[:, None] + 0.5 * (b + a)
+    return jnp.sum(0.5 * (b - a) * f(pts_rescaled) * weights[:, None], axis=0)
+
+
 @jit
-def _integrate_unif(
-    rho,
-    contours,
-    parity,
-    tail_idcs,
-):
-    # Select k and (k + 1)th elements
-    contours_k = contours
-    contours_kp1 = jnp.pad(contours[:, 1:], ((0, 0), (0, 1)))
-    contours_k = vmap(lambda idx, contour: contour.at[idx].set(0.0))(
-        tail_idcs, contours_k
-    )
-
-    # Compute the integral using the trapezoidal rule
-    z1_k, z2_k = jnp.real(contours_k), jnp.imag(contours_k)
-    z1_kp1, z2_kp1 = jnp.real(contours_kp1), jnp.imag(contours_kp1)
-    delta_z1, delta_z2 = z1_kp1 - z1_k, z2_kp1 - z2_k
-
-    mag = jnp.sum(z1_k * delta_z2 - z2_k * delta_z1, axis=1) / (2 * np.pi * rho**2)
+def _integrate_unif(rho, z, parity, tail_idcs):
+    # Trapezoidal rule
+    I1 = trapz_zero_avoiding(0.5 * z.real, z.imag, tail_idcs, axis=1)
+    I2 = trapz_zero_avoiding(-0.5 * z.imag, z.real, tail_idcs, axis=1)
+    mag = (I1 + I2) / (np.pi * rho**2)
 
     # sum magnifications for each image, taking into account the parity
     # (per image)
@@ -66,65 +55,81 @@ def _brightness_profile(z, rho, w_center, u1=0.0, nlenses=2, **params):
 
 @partial(jit, static_argnames=("nlenses", "npts"))
 def _integrate_ld(
-    w_center, rho, contours, parity, tail_idcs, u1=0.0, nlenses=2, npts=50, **params
+    w_center, rho, z, parity, tail_idcs, u1=0.0, nlenses=2, npts=100, **params
 ):
-    # Compute the Legendre roots and weights for use in Gaussian quadrature
-    x_gl, w_gl = roots_legendre(npts)
-    x_gl, w_gl = jnp.array(x_gl), jnp.array(w_gl)
-
     def P(_, y0, xl, yl):
         # Construct grid in z2 and evaluate the brightness profile at each point
         a, b = y0 * jnp.ones_like(xl), yl  # lower and upper limits
+        abs_delta = jnp.abs(b - a)
 
-        # Rescale domain for Gauss-Legendre quadrature
-        A = 0.5 * (b - a)
-        y_eval = 0.5 * (b - a) * x_gl[:, None] + 0.5 * (b + a)
-
-        # Integrate
-        f_eval = _brightness_profile(
-            xl + 1j * y_eval, rho, w_center, u1=u1, nlenses=nlenses, **params
+        # Split each integral into two intervals with the same number of points
+        # and integrate each using Gauss Legendre quadrature
+        mask = b > a
+        split_points = jnp.where(
+            mask,
+            b - 2 * rho,
+            b + 2 * rho,
         )
-        I = jnp.sum(A * w_gl[:, None] * f_eval, axis=0)
+        split_points = jnp.where(
+            0.5 * abs_delta <= 2 * rho, a + 0.5 * abs_delta, split_points
+        )
+
+        # First interval
+        f = lambda y: _brightness_profile(
+            xl + 1j * y, rho, w_center, u1=u1, nlenses=nlenses, **params
+        )
+        npts1 = int(npts / 2)
+        npts2 = npts - npts1
+        I1 = _integrate_gauss_legendre(f, a, split_points, n=npts1)
+
+        # Second interval
+        I2 = _integrate_gauss_legendre(f, split_points, b, n=npts2)
+        I = I1 + I2
+
         return -0.5 * I
 
     def Q(x0, _, xl, yl):
         # Construct grid in z1 and evaluate the brightness profile at each point
         a, b = x0 * jnp.ones_like(yl), xl
+        abs_delta = jnp.abs(b - a)
 
-        # Rescale domain for Gauss-Legendre quadrature
-        A = 0.5 * (b - a)
-        x_eval = 0.5 * (b - a) * x_gl[:, None] + 0.5 * (b + a)
-
-        # Integrate
-        f_eval = _brightness_profile(
-            x_eval + 1j * yl, rho, w_center, u1=u1, nlenses=nlenses, **params
+        # Split each integral into two intervals with the same number of points
+        # and integrate each using Gauss Legendre quadrature
+        mask = b > a
+        split_points = jnp.where(
+            mask,
+            b - 2 * rho,
+            b + 2 * rho,
         )
-        I = jnp.sum(A * w_gl[:, None] * f_eval, axis=0)
+        split_points = jnp.where(
+            0.5 * abs_delta <= 2 * rho, a + 0.5 * abs_delta, split_points
+        )
+
+        # First interval
+        f = lambda x: _brightness_profile(
+            x + 1j * yl, rho, w_center, u1=u1, nlenses=nlenses, **params
+        )
+        npts1 = int(npts / 2)
+        npts2 = npts - npts1
+        I1 = _integrate_gauss_legendre(f, a, split_points, n=npts1)
+
+        # Second interval
+        I2 = _integrate_gauss_legendre(f, split_points, b, n=npts2)
+        I = I1 + I2
+
         return 0.5 * I
 
     # We choose the centroid of each contour to be lower limit for the P and Q
     # integrals
-    z0 = vmap(lambda idx, contour: contour.sum() / (idx + 1))(tail_idcs, contours)
-    z10, z20 = jnp.real(z0), jnp.imag(z0)
+    z0 = vmap(lambda idx, z: z.sum() / (idx + 1))(tail_idcs, z)
 
-    # Select k and (k + 1)th elements
-    contours_k = contours
-    contours_k = vmap(lambda idx, contour: contour.at[idx].set(0.0))(
-        tail_idcs, contours_k
-    )  # set last element to zero
-    contours_kp1 = jnp.pad(contours[:, 1:], ((0, 0), (0, 1)))
+    # Evaluate the P and Q integrals using Trapezoidal rule
+    _P = vmap(P)(z0.real, z0.imag, z.real, z.imag)
+    _Q = vmap(Q)(z0.real, z0.imag, z.real, z.imag)
 
-    z1_k, z2_k = jnp.real(contours_k), jnp.imag(contours_k)
-    z1_kp1, z2_kp1 = jnp.real(contours_kp1), jnp.imag(contours_kp1)
-    delta_z1, delta_z2 = z1_kp1 - z1_k, z2_kp1 - z2_k
-    z1_mid, z2_mid = 0.5 * (z1_k + z1_kp1), 0.5 * (z2_k + z2_kp1)
-
-    # Evaluate the P and Q integrals using Midpoint rule
-    P_mid = vmap(P)(z10, z20, z1_mid, z2_mid)
-    Q_mid = vmap(Q)(z10, z20, z1_mid, z2_mid)
-
-    # Compute the final integral using the trapezoidal rule
-    mag = jnp.sum(P_mid * delta_z1 + Q_mid * delta_z2, axis=1) / (np.pi * rho**2)
+    I1 = trapz_zero_avoiding(_P, z.real, tail_idcs, axis=1)
+    I2 = trapz_zero_avoiding(_Q, z.imag, tail_idcs, axis=1)
+    mag = (I1 + I2) / (np.pi * rho**2)
 
     # sum magnifications for each image, taking into account the parity of each
     # image

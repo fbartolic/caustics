@@ -111,10 +111,10 @@ def test_mag_extended_source_single_uniform(rho, rtol=1e-03):
 
 @pytest.mark.parametrize("rho", [1.0, 1e-01, 1e-02])
 def test_mag_extended_source_single_ld(rho, rtol=1e-03):
-    npts_limb = 200
+    npts_limb = 1000
     niter_limb = 15
-    npts_ld = 150
-    u1 = 0.25
+    npts_ld = 100
+    u1 = 0.7
     w_points = jnp.linspace(0.0, 3.0 * rho, 11)
 
     mags = vmap(
