@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
-import pytest
 
 import jax.numpy as jnp
 from jax.config import config
@@ -9,10 +8,7 @@ from jax.config import config
 from caustics.utils import (
     min_zero_avoiding,
     max_zero_avoiding,
-    ang_dist,
-    ang_dist_diff,
-    add_angles,
-    sub_angles,
+    trapz_zero_avoiding,
 )
 
 config.update("jax_enable_x64", True)
@@ -32,24 +28,23 @@ def test_max_zero_avoiding():
     assert max_zero_avoiding(x) == -1.2
 
 
-def test_ang_dist():
-    t1 = jnp.deg2rad(-170.0)
-    t2 = jnp.deg2rad(170.0)
-    np.testing.assert_allclose(ang_dist(t1, t2), jnp.deg2rad(20.0))
+def test_trapz_zero_avoiding():
+    x1 = jnp.linspace(0, 1, 13)
+    x2 = jnp.linspace(0, 0.3, 10)
 
-    theta = jnp.deg2rad(jnp.array([-5.0, -2.0, 2.0]))
-    np.testing.assert_allclose(
-        ang_dist_diff(theta), jnp.deg2rad(jnp.array([3.0, 4.0, 7.0]))
-    )
+    y1 = jnp.cos(x1)
+    y2 = jnp.cos(x2)
 
+    I1 = jnp.trapz(y1, x1)
+    I2 = jnp.trapz(y2, x2)
 
-def test_add_angles():
-    t1 = jnp.deg2rad(170.0)
-    t2 = jnp.deg2rad(20.0)
-    np.testing.assert_allclose(add_angles(t1, t2), jnp.deg2rad(-170.0))
+    x1 = jnp.append(x1, jnp.zeros(7))
+    x2 = jnp.append(x2, jnp.zeros(10))
+    y1 = jnp.append(y1, jnp.zeros(7))
+    y2 = jnp.append(y2, jnp.zeros(10))
+    x = jnp.stack([x1, x2])
+    y = jnp.stack([y1, y2])
+    tail_idcs = jnp.array([12, 9])
+    res = trapz_zero_avoiding(y, x, tail_idcs, axis=1)
 
-
-def test_sub_angles():
-    t1 = jnp.deg2rad(-170.0)
-    t2 = jnp.deg2rad(30.0)
-    np.testing.assert_allclose(sub_angles(t1, t2), jnp.deg2rad(160.0))
+    np.testing.assert_array_equal(res, jnp.array([I1, I2]))

@@ -10,24 +10,24 @@ __all__ = [
     "sparse_argsort",
     "central_finite_difference",
 ]
-
+from functools import partial
 import jax.numpy as jnp
-from jax import jit
+from jax import jit, lax
 
 
-@jit
-def first_nonzero(x):
-    return (x != 0.0).argmax(axis=0)
+@partial(jit, static_argnames=("axis"))
+def first_nonzero(x, axis=0):
+    return jnp.argmax(x != 0.0, axis=axis)
 
 
-@jit
-def last_nonzero(x):
-    return -(x[::-1] != 0.0).argmax(axis=0) + len(x) - 1
+@partial(jit, static_argnames=("axis"))
+def last_nonzero(x, axis=0):
+    return jnp.argmax(-(x[::-1] != 0.0), axis=axis) + x.shape[axis] - 1
 
 
-@jit
-def first_zero(x):
-    return (x == 0.0).argmax(axis=0)
+@partial(jit, static_argnames=("axis"))
+def first_zero(x, axis=0):
+    return jnp.argmax(x == 0.0, axis=axis)
 
 
 @jit
@@ -87,3 +87,20 @@ def central_finite_difference(x, y):
     fp0 = (y[1] - y[0]) / (x[1] - x[0])
     fpn = (y[-1] - y[-2]) / (x[-1] - x[-2])
     return jnp.append(fp0, jnp.append(fp, fpn))
+
+
+@partial(jit, static_argnames=("axis"))
+def trapz_zero_avoiding(y, x, tail_idcs, axis=0):
+    """Same as jnp.trapz but ignoring all the zeros after tidx."""
+    I = jnp.trapz(y, x=x, axis=axis)
+
+    xt = jnp.take_along_axis(x, tail_idcs[:, None], axis=axis)
+    yt = jnp.take_along_axis(y, tail_idcs[:, None], axis=axis)
+    xtp1 = jnp.take_along_axis(x, tail_idcs[:, None] + 1, axis=axis)
+    ytp1 = jnp.take_along_axis(y, tail_idcs[:, None] + 1, axis=axis)
+
+    return lax.cond(
+        jnp.all(x.shape[axis] - 1 == tail_idcs),
+        lambda: I,
+        lambda: I - 0.5 * ((yt + ytp1) * (xtp1 - xt)).squeeze(),
+    )
