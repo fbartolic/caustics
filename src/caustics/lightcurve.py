@@ -131,7 +131,6 @@ def _extended_source_test(
     static_argnames=(
         "nlenses",
         "npts_limb",
-        "niter_limb",
         "limb_darkening",
         "npts_ld",
         "roots_itmax",
@@ -142,8 +141,7 @@ def mag(
     w_points,
     rho,
     nlenses=2,
-    npts_limb=150,
-    niter_limb=15,
+    npts_limb=200,
     limb_darkening=False,
     u1=0.0,
     npts_ld=100,
@@ -177,18 +175,9 @@ def mag(
         rho (float): Source radius in Einstein radii.
         npts_limb (int, optional): Initial number of points uniformly distributed
             on the source limb when computing the point source magnification.
-            The final number of points depends on this value and `niter_limb`
-            because additional points are added iteratively in a geometric
-            fashion. This parameters determines the precision of the magnification
-            calculation (absent limb-darkening, in which case `npts_ld` is also
-            important). The default value should keep the relative error well
-            below 10^{-3} in all cases. Defaults to 300.
-        niter_limb (int, optional): Number of iterations to use for the point
-            source magnification evaluation on the source limb. At each
-            iteration we geometrically decrease the number of points starting
-            with `npts_limb` and ending with 2 for the final iteration. The new
-            points are placed where the gradient of the magnification is
-            largest. Deaults to 8.
+            The final number of points is greater than this value because
+            the number of points is decreased geometrically by a factor of
+            1/2 until it reaches 2.
         limb_darkening (bool, optional): If True, compute the magnification of
             a limb-darkened source. If limb_darkening is enabled the u1 linear
             limb-darkening coefficient needs to be specified. Defaults to False.
@@ -196,7 +185,6 @@ def mag(
         npts_ld (int, optional): Number of points at which the stellar brightness
             function is evaluated when computing the integrals P and Q from
             Dominik 1998. Defaults to 50.
-
         **a (float): Half the separation between the first two lenses located on
             the real line with $r_1 = a$ and $r_2 = -a$.
         **r3 (float): The position of the third lens at arbitrary location in
@@ -230,7 +218,6 @@ def mag(
         rho,
         nlenses=nlenses,
         npts_limb=npts_limb,
-        niter_limb=niter_limb,
         limb_darkening=limb_darkening,
         u1=u1,
         npts_ld=npts_ld,

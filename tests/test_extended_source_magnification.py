@@ -75,8 +75,7 @@ def test_images_of_source_limb():
 
 @pytest.mark.parametrize("rho", [1.0, 1e-01, 1e-02, 1e-03])
 def test_mag_extended_source_single_uniform(rho, rtol=1e-03):
-    npts_limb = 100
-    niter_limb = 15
+    npts_limb = 150
     w_points = jnp.linspace(0.0, 3.0 * rho, 11)
 
     mags = vmap(
@@ -85,7 +84,6 @@ def test_mag_extended_source_single_uniform(rho, rtol=1e-03):
             rho,
             nlenses=1,
             npts_limb=npts_limb,
-            niter_limb=niter_limb,
         )
     )(w_points)
 
@@ -101,7 +99,6 @@ def test_mag_extended_source_single_uniform(rho, rtol=1e-03):
             u1=0.0,
             nlenses=1,
             npts_limb=npts_limb,
-            niter_limb=niter_limb,
             npts_ld=50,
         )
     )(w_points)
@@ -111,8 +108,7 @@ def test_mag_extended_source_single_uniform(rho, rtol=1e-03):
 
 @pytest.mark.parametrize("rho", [1.0, 1e-01, 1e-02])
 def test_mag_extended_source_single_ld(rho, rtol=1e-03):
-    npts_limb = 1000
-    niter_limb = 15
+    npts_limb = 2000
     npts_ld = 100
     u1 = 0.7
     w_points = jnp.linspace(0.0, 3.0 * rho, 11)
@@ -125,7 +121,6 @@ def test_mag_extended_source_single_ld(rho, rtol=1e-03):
             u1=u1,
             nlenses=1,
             npts_limb=npts_limb,
-            niter_limb=niter_limb,
             npts_ld=npts_ld,
         )
     )(w_points)
@@ -249,7 +244,6 @@ def test_get_contours(rho):
             e1=e1,
             e2=e2,
             npts_init=250,
-            niter=8,
         )
         segments, cond_closed = _get_segments(
             images, images_mask, images_parity, nlenses=3

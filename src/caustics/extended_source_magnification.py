@@ -39,6 +39,7 @@ from .point_source_magnification import (
         "nlenses",
         "npts_init",
         "niter",
+        "geom_factor",
         "roots_itmax",
         "roots_compensated",
     ),
@@ -48,7 +49,7 @@ def _images_of_source_limb(
     rho,
     nlenses=2,
     npts_init=150,
-    niter=15,
+    geom_factor=0.5,
     roots_itmax=2500,
     roots_compensated=False,
     **params,
@@ -77,7 +78,13 @@ def _images_of_source_limb(
 
     # Refine sampling by placing geometrically fewer points each iteration
     # in the regions where the magnification gradient is largest
-    npts_list = np.geomspace(2, npts_init, niter, endpoint=False, dtype=int)[::-1]
+    npts_list = []
+    n = int(geom_factor * npts_init)
+    while n > 2:
+        npts_list.append(n)
+        n = int(geom_factor * n)
+    npts_list.append(2)
+
     key = random.PRNGKey(42)
 
     for _npts in npts_list:
@@ -779,7 +786,6 @@ def _get_contours(
     static_argnames=(
         "nlenses",
         "npts_limb",
-        "niter_limb",
         "limb_darkening",
         "npts_ld",
         "roots_itmax",
@@ -791,7 +797,6 @@ def mag_extended_source(
     rho,
     nlenses=2,
     npts_limb=150,
-    niter_limb=15,
     limb_darkening=False,
     u1=0.0,
     npts_ld=100,
@@ -808,25 +813,16 @@ def mag_extended_source(
         rho (float): Source radius in Einstein radii.
         npts_limb (int, optional): Initial number of points uniformly distributed
             on the source limb when computing the point source magnification.
-            The final number of points depends on this value and `niter_limb`
-            because additional points are added iteratively in a geometric
-            fashion. This parameters determines the precision of the magnification
-            calculation (absent limb-darkening, in which case `npts_ld` is also
-            important). The default value should keep the relative error well
-            below 10^{-3} in all cases. Defaults to 300.
-        niter_limb (int, optional): Number of iterations to use for the point
-            source magnification evaluation on the source limb. At each
-            iteration we geometrically decrease the number of points starting
-            with `npts_limb` and ending with 2 for the final iteration. The new
-            points are placed where the gradient of the magnification is
-            largest. Deaults to 8.
+            The final number of points is greater than this value because
+            the number of points is decreased geometrically by a factor of
+            1/2 until it reaches 2.
         limb_darkening (bool, optional): If True, compute the magnification of
             a limb-darkened source. If limb_darkening is enabled the u1 linear
             limb-darkening coefficient needs to be specified. Defaults to False.
         u1 (float, optional): Linear limb darkening coefficient. Defaults to 0..
         npts_ld (int, optional): Number of points at which the stellar brightness
             function is evaluated when computing the integrals P and Q from
-            Dominik 1998. Defaults to 50.
+            Dominik 1998. Defaults to 100.
         **a (float): Half the separation between the first two lenses located on
             the real line with $r_1 = a$ and $r_2 = -a$.
         **r3 (float): The position of the third lens at arbitrary location in
@@ -845,7 +841,6 @@ def mag_extended_source(
         rho,
         nlenses=nlenses,
         npts_init=npts_limb,
-        niter=niter_limb,
         roots_itmax=roots_itmax,
         roots_compensated=roots_compensated,
         **params,
