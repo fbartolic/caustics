@@ -21,12 +21,24 @@ namespace
     const int deg = *reinterpret_cast<const int *>(in[1]);           // degree of polynomials
     const int itmax = *reinterpret_cast<const int *>(in[2]);         // maxiter
     const bool compensated = *reinterpret_cast<const bool *>(in[3]); // maxiterk
+    const bool custom_init = *reinterpret_cast<const bool *>(in[4]); // custom initialization values
 
     // Flattened polynomial coefficients, shape (deg + 1)*size
-    const complex *coeffs = reinterpret_cast<const complex *>(in[4]);
+    const complex *coeffs = reinterpret_cast<const complex *>(in[5]);
 
     // Output roots, shape deg*size
     complex *roots = reinterpret_cast<complex *>(out);
+
+    // Flattened initialization values for the roots (shape deg*size)
+//    if (custom_init)
+//    {
+    const complex *roots_init = reinterpret_cast<const complex *>(in[6]);
+      // Fill in the roots
+//      for (int i = 0; i < deg * size; i++)
+//      {
+//        roots[i] = roots_init[i];
+//      }
+ //   }
 
     // Allocate memory for temporary arrays
     double *alpha = new double[deg + 1];
@@ -40,7 +52,7 @@ namespace
     {
       for (int idx = 0; idx < size; ++idx)
       {
-        ehrlich_aberth_jax::ehrlich_aberth_comp(deg, itmax, coeffs + idx * (deg + 1), roots + idx * deg,
+        ehrlich_aberth_jax::ehrlich_aberth_comp(deg, itmax, coeffs + idx * (deg + 1), roots + idx * deg, 
                                                 alpha, conv2, points, hull);
       }
     }
@@ -48,8 +60,15 @@ namespace
     {
       for (int idx = 0; idx < size; ++idx)
       {
-        ehrlich_aberth_jax::ehrlich_aberth(deg, itmax, coeffs + idx * (deg + 1), roots + idx * deg,
-                                           alpha, conv, points, hull);
+        if (custom_init){
+        ehrlich_aberth_jax::ehrlich_aberth(deg, itmax, custom_init, coeffs + idx * (deg + 1), roots_init + idx*deg,
+            roots + idx * deg, alpha, conv, points, hull);
+        }
+        else {
+        ehrlich_aberth_jax::ehrlich_aberth(deg, itmax, custom_init, coeffs + idx * (deg + 1),nullptr,
+            roots + idx * deg, alpha, conv, points, hull);
+
+        }
       }
     }
 

@@ -10,7 +10,7 @@ from functools import partial
 
 import numpy as np
 import jax.numpy as jnp
-from jax import jit, vmap, lax, random
+from jax import jit, vmap, lax
 
 from . import (
     images_point_source,
@@ -20,7 +20,6 @@ from .integrate import (
     _integrate_ld,
 )
 from .utils import (
-    central_finite_difference,
     first_nonzero,
     first_zero,
     last_nonzero,
@@ -31,6 +30,52 @@ from .utils import (
 from .point_source_magnification import (
     lens_eq_det_jac,
 )
+
+
+@partial(jit, static_argnums=(3, 4, 5))
+def _eval_images_sequentially(
+    theta, w0, rho, nlenses, roots_compensated, roots_itmax, **params
+):
+    def fn(theta, z_init=None, custom_init=False):
+        if custom_init:
+            z, z_mask = images_point_source(
+                rho * jnp.exp(1j * theta) + w0,
+                nlenses=nlenses,
+                roots_itmax=roots_itmax,
+                roots_compensated=roots_compensated,
+                z_init=z_init,
+                custom_init=True,
+                **params,
+            )
+        else:
+            z, z_mask = images_point_source(
+                rho * jnp.exp(1j * theta) + w0,
+                nlenses=nlenses,
+                roots_itmax=roots_itmax,
+                roots_compensated=roots_compensated,
+                **params,
+            )
+        det = lens_eq_det_jac(z, nlenses=nlenses, **params)
+        z_parity = jnp.sign(det)
+        mag = jnp.sum((1.0 / jnp.abs(det)) * z_mask, axis=0)
+        return z, z_mask, z_parity, mag
+
+    z_first, z_mask_first, z_parity_first, mag_first = fn(theta[0])
+
+    def body_fn(z_prev, theta):
+        z, z_mask, z_parity, mag = fn(theta, z_init=z_prev, custom_init=True)
+        return z, (z, z_mask, z_parity, mag)
+
+    _, xs = lax.scan(body_fn, z_first, theta[1:])
+    z, z_mask, z_parity, mag = xs
+
+    # Append to the initial point
+    z = jnp.concatenate([z_first[None, :], z])
+    z_mask = jnp.concatenate([z_mask_first[None, :], z_mask])
+    z_parity = jnp.concatenate([z_parity_first[None, :], z_parity])
+    mag = jnp.concatenate([jnp.array([mag_first]), mag])
+
+    return z, z_mask, z_parity, mag
 
 
 @partial(
@@ -45,7 +90,7 @@ from .point_source_magnification import (
     ),
 )
 def _images_of_source_limb(
-    w_center,
+    w0,
     rho,
     nlenses=2,
     npts_init=150,
@@ -54,27 +99,28 @@ def _images_of_source_limb(
     roots_compensated=False,
     **params,
 ):
-    def fn(theta):
+    # For convenience
+    def fn(theta, z_init):
         z, z_mask = images_point_source(
-            rho * jnp.exp(1j * theta) + w_center,
+            rho * jnp.exp(1j * theta) + w0,
             nlenses=nlenses,
             roots_itmax=roots_itmax,
             roots_compensated=roots_compensated,
+            z_init=z_init,
+            custom_init=True,
             **params,
         )
         det = lens_eq_det_jac(z, nlenses=nlenses, **params)
         z_parity = jnp.sign(det)
         mag = jnp.sum((1.0 / jnp.abs(det)) * z_mask, axis=0)
-
-        # Evaluate finit difference gradient of the magnification w.r.t. theta
-        mag_grad = central_finite_difference(theta, mag)
-
-        return z, z_mask, mag, mag_grad, z_parity
+        return z, z_mask, z_parity, mag
 
     # Initial sampling on the source limb
     theta = jnp.linspace(-np.pi, np.pi, npts_init - 1, endpoint=False)
     theta = jnp.pad(theta, (0, 1), constant_values=np.pi - 1e-05)
-    z, z_mask, mag, mag_grad, z_parity = fn(theta)
+    z, z_mask, z_parity, mag = _eval_images_sequentially(
+        theta, w0, rho, nlenses, roots_compensated, roots_itmax, **params
+    )
 
     # Refine sampling by placing geometrically fewer points each iteration
     # in the regions where the magnification gradient is largest
@@ -85,101 +131,27 @@ def _images_of_source_limb(
         n = int(geom_factor * n)
     npts_list.append(2)
 
-    key = random.PRNGKey(42)
-
     for _npts in npts_list:
+        # Evaluate finite difference gradient of the magnification w.r.t. theta
+        mag_grad = jnp.diff(mag) / jnp.diff(theta)
+
         # Resample theta
         idcs_maxdelta = jnp.argsort(jnp.abs(mag_grad))[::-1][:_npts]
-        theta_patch = 0.5 * (theta[idcs_maxdelta] + theta[idcs_maxdelta + 1])
+        theta_new = 0.5 * (theta[idcs_maxdelta] + theta[idcs_maxdelta + 1])
 
-        # Add small perturbation to avoid situations where there are duplicate values
-        theta_patch += random.uniform(
-            key, theta_patch.shape, maxval=1e-06
-        )  # small perturbation
-
-        z_patch, z_mask_patch, mag_patch, mag_grad_patch, z_parity_patch = fn(
-            theta_patch
+        z_new, z_mask_new, z_parity_new, mag_new = fn(
+            theta_new,
+            z[idcs_maxdelta],
         )
 
-        # Add to previous values and sort
-        theta = jnp.concatenate([theta, theta_patch])
-        sorted_idcs = jnp.argsort(theta)
-        theta = theta[sorted_idcs]
+        # Insert new values
+        theta = jnp.insert(theta, idcs_maxdelta + 1, theta_new)
+        mag = jnp.insert(mag, idcs_maxdelta + 1, mag_new)
+        z = jnp.insert(z, idcs_maxdelta + 1, z_new.T, axis=0)
+        z_mask = jnp.insert(z_mask, idcs_maxdelta + 1, z_mask_new.T, axis=0)
+        z_parity = jnp.insert(z_parity, idcs_maxdelta + 1, z_parity_new.T, axis=0)
 
-        mag = jnp.concatenate([mag, mag_patch])[sorted_idcs]
-        mag_grad = jnp.concatenate([mag_grad, mag_grad_patch])[sorted_idcs]
-        z = jnp.hstack([z, z_patch])[:, sorted_idcs]
-        z_mask = jnp.hstack([z_mask, z_mask_patch])[:, sorted_idcs]
-        z_parity = jnp.hstack([z_parity, z_parity_patch])[:, sorted_idcs]
-
-    return z, z_mask, z_parity
-
-
-@jit
-def _linear_sum_assignment(a, b):
-    """
-    Given 1D arrays a and b, return the indices which specify the permutation of
-    b for which the element-wise distance between the two arrays is minimized.
-
-    For an alternative solution to this problem see the Hungarian algorithm
-    and similar problems in optimal transport.
-
-    Args:
-        a (array_like): 1D array.
-        b (array_like): 1D array.
-
-    Returns:
-        array_like: Indices which specify the desired permutation of b.
-    """
-    # This is the first guess for a solution but sometimes we get duplicate
-    # indices so for those values we need to choose the next best best
-    # solution.
-    idcs_initial = jnp.argsort(jnp.abs(b - a[:, None]), axis=1)
-    idcs_final = jnp.repeat(999, len(a))
-
-    # Make sure that each index is assigned to at most one value
-    def body_fn(carry, idcs_initial_row):
-        i, idcs_final = carry
-
-        conds = ~jnp.isin(idcs_initial_row, idcs_final)
-        branches = [lambda j=j: idcs_initial_row[j] for j in range(len(a))]
-
-        idx_closest = lax.switch(
-            first_nonzero(conds),
-            branches,
-        )
-
-        idcs_final = idcs_final.at[i].set(idx_closest)
-        return (i + 1, idcs_final), idx_closest
-
-    _, res = lax.scan(body_fn, (0, idcs_final), idcs_initial)
-
-    return res
-
-
-@jit
-def _permute_images(z, z_mask, parity):
-    """
-    Sequantially permute the images corresponding to points on the source limb
-    starting with the first point such that each point source image is assigned
-    to the correct curve. This procedure does not differentiate between real
-    and false images, false images are set to zero after the permutation
-    operation.
-    """
-    segments = jnp.stack([z, z_mask, parity])
-
-    def apply_linear_sum_assignment(carry, array_slice):
-        z, mask_sols, parity = array_slice
-        idcs = _linear_sum_assignment(carry, z)
-        return z[idcs], jnp.stack([z[idcs], mask_sols[idcs], parity[idcs]])
-
-    init = segments[0, :, 0]
-    _, segments = lax.scan(
-        apply_linear_sum_assignment, init, jnp.moveaxis(segments, -1, 0)
-    )
-    z, mask_sols, parity = jnp.moveaxis(segments, 1, 0)
-
-    return z, mask_sols, parity
+    return z.T, z_mask.T, z_parity.T
 
 
 @partial(jit, static_argnames=("n_parts"))
@@ -251,10 +223,11 @@ def _process_segments(segments, nr_of_segments=20):
 def _get_segments(z, z_mask, z_parity, nlenses=2):
     """
     Given the raw images corresponding to a sequence of points on the source
-    limb, return a collection of contour segments some open and some closed.
+    limb, return a collection of contour segments some of which are open and
+    others closed.
 
     Args:
-        images (array_like): Images corresponding to points on the source limb.
+        z (array_like): Images corresponding to points on the source limb.
         z_mask (array_like): Mask which indicated which images are real.
         z_parity (array_like): Parity of each image.
         nlenses (int, optional): _description_. Defaults to 2.
@@ -268,12 +241,9 @@ def _get_segments(z, z_mask, z_parity, nlenses=2):
     n_images = nlenses**2 + 1
     nr_of_segments = 2 * n_images
 
-    # Untangle the images
-    z, z_mask, z_parity = _permute_images(z, z_mask, z_parity)
-
     # Apply mask and bundle the images and parity into a single array
-    z = (z * z_mask).T
-    z_parity = (z_parity * z_mask).T
+    z = z * z_mask
+    z_parity = z_parity * z_mask
     segments = jnp.stack([z, z_parity])
     segments = jnp.moveaxis(segments, 0, 1)
 
@@ -355,21 +325,21 @@ def _connection_condition(line1, line2, max_dist=1e-01):
     )
     cond2 = (180 - jnp.rad2deg(alpha)) < 60.0
 
-    # Point of intersection point of the two lines
-    D = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
-    px = ((x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4)) / D
-    py = ((x1 * y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3 * y4 - y3 * x4)) / D
-    p = px + 1j * py
-
-    # Require that the intersection point is at most `max_dist` away from the
-    # two endpoints
-    cond3 = (jnp.abs(line1[1] - p) < max_dist) & (jnp.abs(line2[1] - p) < max_dist)
+    #    # Point of intersection point of the two lines
+    #    D = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
+    #    px = ((x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4)) / D
+    #    py = ((x1 * y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3 * y4 - y3 * x4)) / D
+    #    p = px + 1j * py
+    #
+    #    # Require that the intersection point is at most `max_dist` away from the
+    #    # two endpoints
+    #    cond3 = (jnp.abs(line1[1] - p) < max_dist) & (jnp.abs(line2[1] - p) < max_dist)
 
     # Distance between endpoints of line1 and line2 has to be smaller than the
     # distance between points where the line begins
     cond4 = jnp.abs(line1[1] - line2[1]) < jnp.abs(line1[0] - line2[0])
 
-    return jnp.logical_or(cond1 & cond2 & cond3 & cond4, dist < 1e-05)
+    return jnp.logical_or(cond1 & cond2 & cond4, dist < 1e-05)
 
 
 @partial(jit, static_argnames=("max_dist"))

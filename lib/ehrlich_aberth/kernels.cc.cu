@@ -18,17 +18,18 @@ namespace ehrlich_aberth_jax
       // Compute roots
       // This is a "grid-stride loop" see
       // http://alexminnaar.com/2019/08/02/grid-stride-loops.html
+      bool custom_init= false;
 
       for (int tid = blockIdx.x * blockDim.x + threadIdx.x; tid < N; tid += blockDim.x * gridDim.x)
       {
-        ehrlich_aberth(deg, itmax, coeffs + tid * (deg + 1), roots + tid * deg,
+        ehrlich_aberth(deg, itmax, custom_init, coeffs + tid * (deg + 1), nullptr, roots + tid * deg,
                        alpha + tid * (deg + 1), conv + tid * deg, points + tid * (deg + 1),
                        hull + tid * (deg + 1));
       }
     }
 
     __global__ void ehrlich_aberth_comp_kernel(const int N, const int deg, const int itmax,
-                                               const complex *coeffs, complex *roots, double *alpha,
+                                               const complex *coeffs, complex *roots,  double *alpha,
                                                point_conv *conv, point *points, point *hull)
     {
 

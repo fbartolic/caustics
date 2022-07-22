@@ -1614,9 +1614,17 @@ def critical_and_caustic_curves(npts=200, nlenses=2, **params):
         raise ValueError("`nlenses` has to be set to be <= 3.")
 
 
-@partial(jit, static_argnames=("nlenses", "roots_itmax", "roots_compensated"))
+@partial(
+    jit, static_argnames=("nlenses", "roots_itmax", "roots_compensated", "custom_init")
+)
 def images_point_source(
-    w, nlenses=2, roots_itmax=2500, roots_compensated=False, **params
+    w,
+    nlenses=2,
+    roots_itmax=2500,
+    roots_compensated=False,
+    custom_init=False,
+    z_init=None,
+    **params
 ):
     if nlenses == 1:
         w_abs_sq = w.real**2 + w.imag**2
@@ -1633,37 +1641,38 @@ def images_point_source(
         # Compute complex polynomial coefficients for each element of w
         coeffs = _poly_coeffs_binary(w, a, e1)
 
-        # Compute roots
-        roots = poly_roots(coeffs, itmax=roots_itmax, compensated=roots_compensated)
-        roots = jnp.moveaxis(roots, -1, 0)
-
-        # Evaluate the lens equation at the roots
-        lens_eq_eval = lens_eq(roots, nlenses=2, **params) - w
-
-        # Mask out roots which don't satisfy the lens equation
-        mask_solutions = jnp.abs(lens_eq_eval) < 1e-5
-
-        return roots, mask_solutions
-
     elif nlenses == 3:
         a, r3, e1, e2 = params["a"], params["r3"], params["e1"], params["e2"]
         # Compute complex polynomial coefficients for each element of w
         coeffs = _poly_coeffs_triple(w, a, r3, e1, e2)
 
-        # Compute roots
-        roots = poly_roots(coeffs, itmax=roots_itmax, compensated=roots_compensated)
-        roots = jnp.moveaxis(roots, -1, 0)
-
-        # Evaluate the lens equation at the roots
-        lens_eq_eval = lens_eq(roots, nlenses=3, **params) - w
-
-        # Mask out roots which don't satisfy the lens equation
-        mask_solutions = jnp.abs(lens_eq_eval) < 1e-5
-
-        return roots, mask_solutions
-
     else:
         raise ValueError("`nlenses` has to be set to be <= 3.")
+
+    # Compute roots
+    if custom_init:
+        roots = poly_roots(
+            coeffs,
+            itmax=roots_itmax,
+            compensated=roots_compensated,
+            custom_init=True,
+            roots_init=z_init,
+        )
+    else:
+        roots = poly_roots(
+            coeffs,
+            itmax=roots_itmax,
+            compensated=roots_compensated,
+        )
+    roots = jnp.moveaxis(roots, -1, 0)
+
+    # Evaluate the lens equation at the roots
+    lens_eq_eval = lens_eq(roots, nlenses=nlenses, **params) - w
+
+    # Mask out roots which don't satisfy the lens equation
+    mask_solutions = jnp.abs(lens_eq_eval) < 1e-5
+
+    return roots, mask_solutions
 
 
 @partial(jit, static_argnames=("nlenses", "roots_itmax", "roots_compensated"))

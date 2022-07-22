@@ -10,7 +10,7 @@ from jax.test_util import check_grads
 
 from caustics.extended_source_magnification import (
     _images_of_source_limb,
-    _linear_sum_assignment,
+    _match_two_sets_of_images,
     _permute_images,
     _split_single_segment,
     _get_segments,
@@ -18,9 +18,11 @@ from caustics.extended_source_magnification import (
     _connection_condition,
 )
 from caustics import (
+    images_point_source,
     critical_and_caustic_curves,
     mag_extended_source,
 )
+from caustics.point_source_magnification import lens_eq_det_jac
 
 config.update("jax_platform_name", "cpu")
 config.update("jax_enable_x64", True)
@@ -61,21 +63,37 @@ def mag_espl_lee_ld(w_points, rho, u1=0.0):
 #    )
 
 
-def test_images_of_source_limb():
-    a, e1, rho = 0.45, 0.8, 1e-02
-    w_center = 0.38695745 + 0.0015302j
-    z, z_mask, z_parity = _images_of_source_limb(
-        w_center, rho, nlenses=2, a=a, e1=e1, npts_init=250
+@pytest.mark.parametrize("rho", [1e-01, 1e-02, 1e-03])
+def test_images_of_source_limb(rho):
+    a, e1, e2, r3 = 0.698, 0.02809, 0.9687, -0.0197 - 0.95087j
+
+    critical_curves, caustic_curves = critical_and_caustic_curves(
+        nlenses=3, npts=10, a=a, e1=e1, e2=e2, r3=r3, rho=rho
     )
 
-    # Check that there are no identical points
-    u, c = jnp.unique(z, return_counts=True)
-    assert (c > 1).sum() == 0
+    key = random.PRNGKey(42)
+    key, subkey1, subkey2 = random.split(key, num=3)
+
+    # Generate random test points near the caustics
+    w_test = (
+        caustic_curves
+        + random.uniform(subkey1, caustic_curves.shape, minval=-2 * rho, maxval=2 * rho)
+        + 1j
+        * random.uniform(subkey2, caustic_curves.shape, minval=-2 * rho, maxval=2 * rho)
+    )
+    for w in w_test:
+        z, z_mask, z_parity = _images_of_source_limb(
+            w, rho, nlenses=3, a=a, e1=e1, e2=e2, r3=r3, npts=200
+        )
+
+        # Check that there are no identical points
+        u, c = jnp.unique(z, return_counts=True)
+        assert (c > 1).sum() == 0
 
 
 @pytest.mark.parametrize("rho", [1.0, 1e-01, 1e-02, 1e-03])
 def test_mag_extended_source_single_uniform(rho, rtol=1e-03):
-    npts_limb = 150
+    npts_limb = 100
     w_points = jnp.linspace(0.0, 3.0 * rho, 11)
 
     mags = vmap(
@@ -108,8 +126,8 @@ def test_mag_extended_source_single_uniform(rho, rtol=1e-03):
 
 @pytest.mark.parametrize("rho", [1.0, 1e-01, 1e-02])
 def test_mag_extended_source_single_ld(rho, rtol=1e-03):
-    npts_limb = 2000
-    npts_ld = 100
+    npts_limb = 300
+    npts_ld = 150
     u1 = 0.7
     w_points = jnp.linspace(0.0, 3.0 * rho, 11)
 
@@ -129,10 +147,10 @@ def test_mag_extended_source_single_ld(rho, rtol=1e-03):
     np.testing.assert_allclose(mags, mags_lee, rtol=rtol)
 
 
-def test_linear_sum_assignment():
+def test_match_two_sets_of_images():
     x = jnp.array([2.3, 3.2, 6.3, 143.0, 0.3, 753.0])
     y = jnp.array([0.4, 653.0, 6.1, 125.0, 3.1, 2.45])
-    assert jnp.all(_linear_sum_assignment(x, y) == jnp.array([5, 4, 2, 3, 0, 1]))
+    assert jnp.all(_match_two_sets_of_images(x, y) == jnp.array([5, 4, 2, 3, 0, 1]))
 
 
 def test_permute_images():
@@ -140,13 +158,29 @@ def test_permute_images():
     w_center = -0.65
     rho = 1e-02
 
-    z, z_mask, z_parity = _images_of_source_limb(
-        w_center, rho, nlenses=3, npts=250, a=a, r3=r3, e1=e1, e2=e2
+    npts_init = 100
+    theta = jnp.linspace(-np.pi, np.pi, npts_init - 1, endpoint=False)
+    z, z_mask = images_point_source(
+        rho * jnp.exp(1j * theta) + w_center,
+        nlenses=3,
+        a=a,
+        r3=r3,
+        e1=e1,
+        e2=e2,
     )
+    det = lens_eq_det_jac(z, nlenses=3, a=a, r3=r3, e1=e1, e2=e2)
+    z_parity = jnp.sign(det)
+
+    # Sort
+    idcs_sorted = jnp.argsort(z_mask, axis=0)[::-1, :]
+    z = jnp.take_along_axis(z, idcs_sorted, axis=0)
+    z_mask = jnp.take_along_axis(z_mask, idcs_sorted, axis=0)
+    z_parity = jnp.take_along_axis(z_parity, idcs_sorted, axis=0)
+
     z, z_mask, z_parity = _permute_images(z, z_mask, z_parity)
 
     # Make sure that the distance between consecutive points is small
-    assert jnp.all(jnp.max(jnp.diff(jnp.abs(z), axis=0), axis=0) < 0.1)
+    assert jnp.all(jnp.max(jnp.diff(jnp.abs(z), axis=1), axis=0) < 0.1)
 
 
 def test_split_single_segment():
@@ -167,7 +201,7 @@ def test_split_single_segment():
     assert jnp.all(seg_split[3, 0, :] == 0.0)
 
 
-@pytest.mark.parametrize("rho", [1e-02, 1e-03])
+@pytest.mark.parametrize("rho", [1e-01, 1e-02, 1e-03])
 def test_get_segments(rho):
     a, e1, e2, r3 = 0.698, 0.02809, 0.9687, -0.0197 - 0.95087j
 
@@ -175,8 +209,19 @@ def test_get_segments(rho):
         npts=10, nlenses=3, a=a, e1=e1, e2=e2, r3=r3
     )
 
+    key = random.PRNGKey(42)
+    key, subkey1, subkey2 = random.split(key, num=3)
+
+    # Generate random test points near the caustics
+    w_test = (
+        caustic_curves
+        + random.uniform(subkey1, caustic_curves.shape, minval=-2 * rho, maxval=2 * rho)
+        + 1j
+        * random.uniform(subkey2, caustic_curves.shape, minval=-2 * rho, maxval=2 * rho)
+    )
+
     def f(w):
-        images, images_mask, images_parity = _images_of_source_limb(
+        z, z_mask, z_parity = _images_of_source_limb(
             w,
             rho,
             nlenses=3,
@@ -184,13 +229,12 @@ def test_get_segments(rho):
             r3=r3,
             e1=e1,
             e2=e2,
+            npts_init=200,
         )
-        segments, cond_closed = _get_segments(
-            images, images_mask, images_parity, nlenses=3
-        )
+        segments, cond_closed = _get_segments(z, z_mask, z_parity, nlenses=3)
         return segments
 
-    segments_list = vmap(jit(f))(caustic_curves)
+    segments_list = jnp.array([f(w) for w in w_test])
 
     def check_single_segment(segment):
         z, p = segment
@@ -210,12 +254,14 @@ def test_get_segments(rho):
         f = lambda seg: lax.cond(
             jnp.all(seg == 0 + 0j), lambda _: 1.0, check_single_segment, seg
         )
-        return vmap(f)(segments)
+        return jnp.any(jnp.isnan(vmap(f)(segments)))
 
-    assert jnp.all(jnp.isnan(vmap(jit(check_segments))(segments_list)) == False)
+    assert jnp.all(
+        jnp.isnan(jnp.array([check_segments(seg) for seg in segments_list])) == False
+    )
 
 
-@pytest.mark.parametrize("rho", [1e-02, 1e-03])
+@pytest.mark.parametrize("rho", [1e-01, 1e-02, 1e-03])
 def test_get_contours(rho):
     a, e1, e2, r3 = 0.698, 0.02809, 0.9687, -0.0197 - 0.95087j
 
@@ -235,7 +281,7 @@ def test_get_contours(rho):
     )
 
     def f(w):
-        images, images_mask, images_parity = _images_of_source_limb(
+        z, z_mask, z_parity = _images_of_source_limb(
             w,
             rho,
             nlenses=3,
@@ -243,20 +289,33 @@ def test_get_contours(rho):
             r3=r3,
             e1=e1,
             e2=e2,
-            npts_init=250,
+            npts_init=200,
         )
-        segments, cond_closed = _get_segments(
-            images, images_mask, images_parity, nlenses=3
-        )
+        segments, cond_closed = _get_segments(z, z_mask, z_parity, nlenses=3)
         contours, parity, tail_idcs = _get_contours(
-            segments, cond_closed, n_contours=10, max_dist=1e-01
+            segments,
+            cond_closed,
+            n_contours=10,
         )
         return contours, parity, tail_idcs
 
-    contours_list, parity_list, tail_idcs_list = vmap(jit(f))(w_test)
+    contours_list, parity_list, tail_idcs_list = [], [], []
+    for w in w_test:
+        contours, parity, tail_idcs = f(w)
+        contours_list.append(contours)
+        parity_list.append(parity)
+        tail_idcs_list.append(tail_idcs)
+
+    contours_list, parity_list, tail_idcs_list = (
+        jnp.stack(contours_list),
+        jnp.stack(parity_list),
+        jnp.stack(tail_idcs_list),
+    )
+
     tail_idcs_list = tail_idcs_list - 1
 
     def test_connection_cond(cont, tidx):
+        """ "Test that contour is closed"""
         return jnp.where(
             jnp.all(cont == 0 + 0j),
             True,
@@ -267,10 +326,12 @@ def test_get_contours(rho):
             ),
         )
 
-    # Check that each contours endpoints satisfy the connection condition
-    connection_conds = vmap(vmap(jit(test_connection_cond)))(
-        contours_list, tail_idcs_list
-    )
+    connection_conds = np.zeros((contours_list.shape[:2]))
+    for i in range(contours_list.shape[0]):
+        for j in range(contours_list.shape[1]):
+            connection_conds[i, j] = test_connection_cond(
+                contours_list[i, j], tail_idcs_list[i, j]
+            )
 
     assert jnp.all(jnp.prod(connection_conds, axis=1))
 

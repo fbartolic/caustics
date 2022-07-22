@@ -22,7 +22,7 @@ def first_nonzero(x, axis=0):
 
 @partial(jit, static_argnames=("axis"))
 def last_nonzero(x, axis=0):
-    return jnp.argmax(-(x[::-1] != 0.0), axis=axis) + x.shape[axis] - 1
+    return (x.shape[axis] - 1) - jnp.argmax(jnp.flip(x, axis=axis) != 0, axis=axis)
 
 
 @partial(jit, static_argnames=("axis"))
