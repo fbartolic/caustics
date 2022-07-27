@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 __all__ = [
-    "index_update",
     "first_nonzero",
     "last_nonzero",
     "first_zero",
@@ -28,17 +27,6 @@ def last_nonzero(x, axis=0):
 @partial(jit, static_argnames=("axis"))
 def first_zero(x, axis=0):
     return jnp.argmax(x == 0.0, axis=axis)
-
-
-@jit
-def index_update(X, idx, x):
-    """
-    See https://github.com/google/jax/issues/10129
-    """
-    X = X.at[idx].set(jnp.zeros_like(X[0]))
-    Y = jnp.zeros_like(X)
-    Y = Y.at[idx].set(x)
-    return X + Y
 
 
 @jit
