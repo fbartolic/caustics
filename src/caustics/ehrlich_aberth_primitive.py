@@ -31,8 +31,10 @@ xops = xla_client.ops
 
 # This function is just a wrapper around ehrlich_aberth to make it easier to
 # handle arrays with different shapes
-@partial(jit, static_argnames=("itmax", "compensated"))
-def poly_roots(coeffs, itmax=2000, compensated=False):
+@partial(jit, static_argnames=("itmax", "compensated", "custom_init"))
+def poly_roots(
+    coeffs, itmax=2000, compensated=False, custom_init=False, roots_init=None
+):
     """
     Computes the roots of a complex polynomial using the Ehrlich-Aberth method.
     The function wraps a C++ CUDA version of the C code that is available here:
@@ -47,12 +49,18 @@ def poly_roots(coeffs, itmax=2000, compensated=False):
 
     Args:
         coeffs (array_like): A JAX array of complex polynomial coefficients
-            where the last dimension is stores the coefficients starting from
+            where the last axis stores the coefficients starting from
             the coefficient of the highest order term.
         itmax (int, optional): Maximum number of iteration of the root solver.
             Defaults to 2000.
         compensated (bool, optional): Use the compensated arithmetic version
             of the Ehrlich-Aberth algorithm. Defaults to False.
+        custom_init (bool): Use a user specified initial guess for the roots.
+           If this is set to True, `roots_init` must be provided. Defaults to
+           False.
+        roots_init (array_like): An array containing the initial guesses for
+            the roots. The last axising stores the roots and has to have
+            dimension one less than the last axis of `coeffs`.
 
     Returns:
         array_like: The complex roots of the polynomial. Same shape as `coeffs`
@@ -63,18 +71,39 @@ def poly_roots(coeffs, itmax=2000, compensated=False):
 
     # The `ehrlich_aberth` function expects the coefficients to be ordered as
     # p[0] + p[1] * x + ...
-    coeffs = coeffs.reshape((-1, ncoeffs))[:, ::-1]
-    roots = ehrlich_aberth(coeffs, itmax=itmax, compensated=compensated)
+    coeffs_flat = coeffs.reshape((-1, ncoeffs))[:, ::-1]
+    if custom_init:
+        roots_init = roots_init.reshape((coeffs_flat.shape[0], ncoeffs - 1))
+        roots = ehrlich_aberth(
+            coeffs_flat,
+            roots_init,
+            itmax=itmax,
+            compensated=compensated,
+            custom_init=True,
+        )
+    else:
+        roots_init = jnp.empty(
+            (coeffs_flat.shape[0], ncoeffs - 1), dtype=jnp.complex128
+        )
+        roots = ehrlich_aberth(
+            coeffs_flat,
+            roots_init,
+            itmax=itmax,
+            compensated=compensated,
+            custom_init=False,
+        )
     return roots.reshape(output_shape)
 
 
 # This function exposes the primitive to user code
-@partial(jit, static_argnames=("itmax", "compensated"))
-def ehrlich_aberth(coeffs, itmax=None, compensated=None):
+@partial(jit, static_argnames=("itmax", "compensated", "custom_init"))
+def ehrlich_aberth(coeffs, roots_init, itmax=None, compensated=None, custom_init=False):
     roots = _ehrlich_aberth_prim.bind(
         coeffs,
+        roots_init,
         itmax=itmax,
         compensated=compensated,
+        custom_init=custom_init,
     )
     return roots
 
@@ -85,7 +114,7 @@ def ehrlich_aberth(coeffs, itmax=None, compensated=None):
 
 # For JIT compilation we need a function to evaluate the shape and dtype of the
 # outputs of our op for some given inputs
-def _ehrlich_aberth_abstract(coeffs, **kwargs):
+def _ehrlich_aberth_abstract(coeffs, roots_init, **kwargs):
     """
     Abstract evaluation of the primitive.
 
@@ -102,7 +131,13 @@ def _ehrlich_aberth_abstract(coeffs, **kwargs):
 # our case this is the custom XLA op that we've written. We're wrapping two
 # translation rules into one here: one for the CPU and one for the GPU
 def _ehrlich_aberth_translation(
-    c, coeffs, itmax=None, compensated=None, platform="cpu"
+    c,
+    coeffs,
+    roots_init,
+    itmax=None,
+    compensated=None,
+    custom_init=False,
+    platform="cpu",
 ):
     """
     The compilation to XLA of the primitive.
@@ -122,12 +157,13 @@ def _ehrlich_aberth_translation(
     """
     # The inputs have "shapes" that provide both the shape and the dtype
     coeffs_shape = c.get_shape(coeffs)
+    roots_init_shape = c.get_shape(roots_init)
 
-    # Input shapes
-    dims_input = coeffs_shape.dimensions()
+    dims_coeffs = coeffs_shape.dimensions()
+    dims_roots_init = roots_init_shape.dimensions()
 
-    size = dims_input[0]  # number of polynomials
-    deg = dims_input[1] - 1  # degree of polynomials
+    size = dims_coeffs[0]  # number of polynomials
+    deg = dims_coeffs[1] - 1  # degree of polynomials
 
     # Output shapes
     dims_output = (size * deg,)
@@ -135,11 +171,17 @@ def _ehrlich_aberth_translation(
     # Extract the dtype
     dtype = coeffs_shape.element_type()
     assert coeffs_shape.element_type() == dtype
-    assert coeffs_shape.dimensions() == dims_input
+    assert coeffs_shape.dimensions() == dims_coeffs
 
     shape_input = xla_client.Shape.array_shape(
-        np.dtype(dtype), dims_input, tuple(range(len(dims_input) - 1, -1, -1))
+        np.dtype(dtype), dims_coeffs, tuple(range(len(dims_coeffs) - 1, -1, -1))
     )
+    shape_roots_init = xla_client.Shape.array_shape(
+        np.dtype(dtype),
+        dims_roots_init,
+        tuple(range(len(dims_roots_init) - 1, -1, -1)),
+    )
+
     shape_output = xla_client.Shape.array_shape(
         np.dtype(dtype), dims_output, tuple(range(len(dims_output) - 1, -1, -1))
     )
@@ -162,7 +204,9 @@ def _ehrlich_aberth_translation(
                 xops.ConstantLiteral(c, deg),
                 xops.ConstantLiteral(c, itmax),
                 xops.ConstantLiteral(c, compensated),
+                xops.ConstantLiteral(c, custom_init),
                 coeffs,
+                roots_init,
             ),
             # The input shapes:
             operand_shapes_with_layout=(
@@ -170,7 +214,9 @@ def _ehrlich_aberth_translation(
                 xla_client.Shape.array_shape(np.dtype(np.int64), (), ()),
                 xla_client.Shape.array_shape(np.dtype(np.int64), (), ()),
                 xla_client.Shape.array_shape(np.dtype(np.bool), (), ()),
+                xla_client.Shape.array_shape(np.dtype(np.bool), (), ()),
                 shape_input,
+                shape_roots_init,
             ),
             # The output shapes:
             shape_with_layout=shape_output,
@@ -207,8 +253,10 @@ def _ehrlich_aberth_translation(
 # applied, the jvp-transformed function executes a “JVP rule” for that primitive
 # that both evaluates the primitive on the primals and applies the primitive’s
 # JVP at those primal values.
-@partial(jit, static_argnames=("itmax", "compensated"))
-def _ehrlich_aberth_jvp(args, tangents, itmax=None, compensated=None):
+@partial(jit, static_argnames=("itmax", "compensated", "custom_init"))
+def _ehrlich_aberth_jvp(
+    args, tangents, itmax=None, compensated=False, custom_init=False
+):
     """
     Compute the Jacobian-vector product of the Ehrlich-Aberth complex polynomial
     root solver.
@@ -219,7 +267,7 @@ def _ehrlich_aberth_jvp(args, tangents, itmax=None, compensated=None):
     implicit function such tat h(p) = z0 (in our case this is the `ehrlich_aberth`
     function). The Jacobian of this function is given by:
 
-    \partial_z0 h(p0) = -[\partial_z f(z0, p0)]^(-1) \partial_p f(z0, p0)
+    \partial_p h(p0) = -[\partial_z f(z0, p0)]^(-1) \partial_p f(z0, p0)
 
     THe first part of the above equation is the first derivative of f(z, p)
     evaluated at the root z0 and the second part is a vector of partial derivatives
@@ -248,8 +296,12 @@ def _ehrlich_aberth_jvp(args, tangents, itmax=None, compensated=None):
     size = p.shape[0]  # number of polynomials
     deg = p.shape[1] - 1  # degree of polynomials
 
+    roots_init = args[1]
+
     # Evaluate the roots (shape (size*deg,))
-    z = _ehrlich_aberth_prim.bind(p, itmax=itmax, compensated=compensated)
+    z = _ehrlich_aberth_prim.bind(
+        p, roots_init, itmax=itmax, compensated=compensated, custom_init=custom_init
+    )
     z = z.reshape((size, deg))
 
     # Evaluate the derivative of the polynomials at the roots
@@ -264,13 +316,10 @@ def _ehrlich_aberth_jvp(args, tangents, itmax=None, compensated=None):
     df_dp = vmap(vmap(lambda z: jnp.power(z, jnp.arange(deg + 1))))(z)
 
     # Jacobian of the roots multiplied by the tangents, shape (size, deg)
-    dz = (
-        vmap(
-            lambda df_dp_i: jnp.sum(df_dp_i * zero_tangent(dp, p), axis=1),
-            in_axes=1,  # vmap over all roots
-        )(df_dp).T
-        / (-df_dz)
-    )
+    dz = vmap(
+        lambda df_dp_i: jnp.sum(df_dp_i * zero_tangent(dp, p), axis=1),
+        in_axes=1,  # vmap over all roots
+    )(df_dp).T / (-df_dz)
 
     return (
         z.reshape(-1),
@@ -294,11 +343,15 @@ def _ehrlich_aberth_batch(args, axes, **kwargs):
         a tuple of the result, and the result axis that was batched.
     """
     coeffs = args[0]
+    roots_init = args[1]
     axis = axes[0]
     ncoeffs = coeffs.shape[-1]
+    nroots = roots_init.shape[-1]
+
     output_shape = coeffs.shape[:-1] + (ncoeffs - 1,)
     coeffs = coeffs.reshape(-1, ncoeffs)
-    res = ehrlich_aberth(coeffs, **kwargs)
+    roots_init = roots_init.reshape(-1, nroots)
+    res = ehrlich_aberth(coeffs, roots_init, **kwargs)
 
     return res.reshape(output_shape), axis
 

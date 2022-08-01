@@ -7,7 +7,6 @@ __all__ = [
     "max_zero_avoiding",
     "mean_zero_avoiding",
     "sparse_argsort",
-    "central_finite_difference",
 ]
 from functools import partial
 import jax.numpy as jnp
@@ -21,7 +20,12 @@ def first_nonzero(x, axis=0):
 
 @partial(jit, static_argnames=("axis"))
 def last_nonzero(x, axis=0):
-    return (x.shape[axis] - 1) - jnp.argmax(jnp.flip(x, axis=axis) != 0, axis=axis)
+    return lax.cond(
+        jnp.any(x, axis=axis),  # if any non-zero
+        lambda: (x.shape[axis] - 1)
+        - jnp.argmax(jnp.flip(x, axis=axis) != 0, axis=axis),
+        lambda: 0,
+    )
 
 
 @partial(jit, static_argnames=("axis"))
@@ -63,32 +67,15 @@ def sparse_argsort(a):
 
 
 @jit
-def central_finite_difference(x, y):
+def trapz_zero_avoiding(y, x, tail_idx):
     """
-    Evaluate the first derivative using central finite difference with
-    a non-uniform grid. This function is equivalent to np.gradient(y, x).
+    Same as jnp.trapz(y[:tail_idx + 1] x=x[:tail_idx + 1], axis=0).
     """
-    x0, x1, x2 = x[:-2], x[1:-1], x[2:]
-    y0, y1, y2 = y[:-2], y[1:-1], y[2:]
-    f = (x2 - x1) / (x2 - x0)
-    fp = (1 - f) * (y2 - y1) / (x2 - x1) + f * (y1 - y0) / (x1 - x0)
-    fp0 = (y[1] - y[0]) / (x[1] - x[0])
-    fpn = (y[-1] - y[-2]) / (x[-1] - x[-2])
-    return jnp.append(fp0, jnp.append(fp, fpn))
-
-
-@partial(jit, static_argnames=("axis"))
-def trapz_zero_avoiding(y, x, tail_idcs, axis=0):
-    """Same as jnp.trapz but ignoring all the zeros after tidx."""
-    I = jnp.trapz(y, x=x, axis=axis)
-
-    xt = jnp.take_along_axis(x, tail_idcs[:, None], axis=axis)
-    yt = jnp.take_along_axis(y, tail_idcs[:, None], axis=axis)
-    xtp1 = jnp.take_along_axis(x, tail_idcs[:, None] + 1, axis=axis)
-    ytp1 = jnp.take_along_axis(y, tail_idcs[:, None] + 1, axis=axis)
-
+    I = jnp.trapz(y, x=x)
+    xt, yt = x[tail_idx], y[tail_idx]
+    xtp1, ytp1 = x[tail_idx + 1], y[tail_idx + 1]
     return lax.cond(
-        jnp.all(x.shape[axis] - 1 == tail_idcs),
+        tail_idx == len(x) - 1,
         lambda: I,
-        lambda: I - 0.5 * ((yt + ytp1) * (xtp1 - xt)).squeeze(),
+        lambda: I - 0.5 * ((yt + ytp1) * (xtp1 - xt)),
     )

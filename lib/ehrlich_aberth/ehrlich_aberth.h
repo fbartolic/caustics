@@ -148,24 +148,23 @@ namespace ehrlich_aberth_jax
       assert(!s);
     }
 
-    if (custom_init){
-    // Iterate over all roots and for each root i if there is another roots j such that 
-    // thrust::abs(roots[i]-roots_init[i]) < thrust::abs(roots[i]-roots_init[j]) 
-    // permute the ordering of roots[i] and roots[j]
-    for (int i = 0; i < deg; i++)
-    {
-      for (int j = 0; j < deg; j++)
-      {
-        if (thrust::abs(roots[j] - roots_init[i]) < thrust::abs(roots[i] - roots_init[i]))
-        {
-          complex temp = roots[i];
-          roots[i] = roots[j];
-          roots[j] = temp;
-        }
-      }
-    }
-
-    }
+//    if (custom_init){
+//    // Iterate over all roots and for each root i if there is another roots j such that 
+//    // thrust::abs(roots[i]-roots_init[i]) < thrust::abs(roots[i]-roots_init[j]) 
+//    // permute the ordering of roots[i] and roots[j]
+//    for (int i = 0; i < deg; i++)
+//    {
+//      for (int j = 0; j < deg; j++)
+//      {
+//        if (thrust::abs(roots[j] - roots_init[i]) < thrust::abs(roots[i] - roots_init[i]))
+//        {
+//          complex temp = roots[i];
+//          roots[i] = roots[j];
+//          roots[j] = temp;
+//        }
+//      }
+//    }
+//    }
 
   }
 

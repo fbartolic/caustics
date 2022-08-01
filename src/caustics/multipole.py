@@ -10,6 +10,7 @@ from functools import partial
 
 import numpy as np
 import jax.numpy as jnp
+import jax
 from jax import jit, vmap, checkpoint
 from jax.scipy.special import gammaln
 
@@ -224,7 +225,7 @@ def _mag_hexadecapole_cassan(W, images_mask, rho, u1=0.0):
 
 
 @partial(jit, static_argnames=("nlenses"))
-def mag_hexadecapole(z, z_mask, rho, u1=0.0, nlenses=2, **params):
+def _mag_hexadecapole(z, z_mask, rho, u1=0.0, nlenses=2, **params):
     # Wk from Cassan et. al. 2017
     factorial = lambda n: jnp.exp(gammaln(n + 1))
 
@@ -250,3 +251,11 @@ def mag_hexadecapole(z, z_mask, rho, u1=0.0, nlenses=2, **params):
     Ws = vmap(W)(jnp.arange(2, 7))
 
     return _mag_hexadecapole_cassan(Ws, z_mask, rho, u1=u1)
+
+
+def mag_hexadecapole(z, z_mask, rho, u1=0.0, nlenses=2, **params):
+    return jax.checkpoint(  # use checkpoint to save memory in reverse pass
+        lambda z, z_mask, rho, u1, **params: _mag_hexadecapole(
+            z, z_mask, rho, u1=u1, **params, nlenses=nlenses
+        )
+    )(z, z_mask, rho, u1=u1, **params)

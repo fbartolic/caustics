@@ -7,7 +7,7 @@ from functools import partial
 
 import numpy as np
 import jax.numpy as jnp
-from jax import jit, vmap
+from jax import jit
 
 from .utils import *
 
@@ -23,21 +23,17 @@ def _integrate_gauss_legendre(f, a, b, n=100):
 
 
 @jit
-def _integrate_unif(rho, z, parity, tail_idcs):
+def _integrate_unif(z, tidx):
     # Trapezoidal rule
-    I1 = trapz_zero_avoiding(0.5 * z.real, z.imag, tail_idcs, axis=1)
-    I2 = trapz_zero_avoiding(-0.5 * z.imag, z.real, tail_idcs, axis=1)
-    mag = (I1 + I2) / (np.pi * rho**2)
-
-    # sum magnifications for each image, taking into account the parity
-    # (per image)
-    return jnp.abs(jnp.sum(mag * parity))
+    I1 = trapz_zero_avoiding(0.5 * z.real, z.imag, tidx)
+    I2 = trapz_zero_avoiding(-0.5 * z.imag, z.real, tidx)
+    return I1 + I2
 
 
 @partial(jit, static_argnames=("nlenses"))
-def _brightness_profile(z, rho, w_center, u1=0.0, nlenses=2, **params):
+def _brightness_profile(z, rho, w0, u1=0.0, nlenses=2, **params):
     w = lens_eq(z, nlenses=nlenses, **params)
-    r = jnp.abs(w - w_center) / rho
+    r = jnp.abs(w - w0) / rho
 
     def safe_for_grad_sqrt(x):
         return jnp.sqrt(jnp.where(x > 0.0, x, 0.0))
@@ -54,9 +50,7 @@ def _brightness_profile(z, rho, w_center, u1=0.0, nlenses=2, **params):
 
 
 @partial(jit, static_argnames=("nlenses", "npts"))
-def _integrate_ld(
-    w_center, rho, z, parity, tail_idcs, u1=0.0, nlenses=2, npts=100, **params
-):
+def _integrate_ld(z, tidx, w0, rho, u1=0.0, nlenses=2, npts=100, **params):
     def P(_, y0, xl, yl):
         # Construct grid in z2 and evaluate the brightness profile at each point
         a, b = y0 * jnp.ones_like(xl), yl  # lower and upper limits
@@ -76,7 +70,7 @@ def _integrate_ld(
 
         # First interval
         f = lambda y: _brightness_profile(
-            xl + 1j * y, rho, w_center, u1=u1, nlenses=nlenses, **params
+            xl + 1j * y, rho, w0, u1=u1, nlenses=nlenses, **params
         )
         npts1 = int(npts / 2)
         npts2 = npts - npts1
@@ -107,7 +101,7 @@ def _integrate_ld(
 
         # First interval
         f = lambda x: _brightness_profile(
-            x + 1j * yl, rho, w_center, u1=u1, nlenses=nlenses, **params
+            x + 1j * yl, rho, w0, u1=u1, nlenses=nlenses, **params
         )
         npts1 = int(npts / 2)
         npts2 = npts - npts1
@@ -119,18 +113,14 @@ def _integrate_ld(
 
         return 0.5 * I
 
-    # We choose the centroid of each contour to be lower limit for the P and Q
-    # integrals
-    z0 = vmap(lambda idx, z: z.sum() / (idx + 1))(tail_idcs, z)
+    # Centroid of the contour
+    z0 = z.sum() / (tidx + 1)
 
     # Evaluate the P and Q integrals using Trapezoidal rule
-    _P = vmap(P)(z0.real, z0.imag, z.real, z.imag)
-    _Q = vmap(Q)(z0.real, z0.imag, z.real, z.imag)
+    _P = P(z0.real, z0.imag, z.real, z.imag)
+    _Q = Q(z0.real, z0.imag, z.real, z.imag)
 
-    I1 = trapz_zero_avoiding(_P, z.real, tail_idcs, axis=1)
-    I2 = trapz_zero_avoiding(_Q, z.imag, tail_idcs, axis=1)
-    mag = (I1 + I2) / (np.pi * rho**2)
+    I1 = trapz_zero_avoiding(_P, z.real, tidx)
+    I2 = trapz_zero_avoiding(_Q, z.imag, tidx)
 
-    # sum magnifications for each image, taking into account the parity of each
-    # image
-    return jnp.abs(jnp.sum(mag * parity))
+    return I1 + I2
