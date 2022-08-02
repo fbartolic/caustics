@@ -30,15 +30,7 @@ namespace
     complex *roots = reinterpret_cast<complex *>(out);
 
     // Flattened initialization values for the roots (shape deg*size)
-//    if (custom_init)
-//    {
     const complex *roots_init = reinterpret_cast<const complex *>(in[6]);
-      // Fill in the roots
-//      for (int i = 0; i < deg * size; i++)
-//      {
-//        roots[i] = roots_init[i];
-//      }
- //   }
 
     // Allocate memory for temporary arrays
     double *alpha = new double[deg + 1];
@@ -52,8 +44,16 @@ namespace
     {
       for (int idx = 0; idx < size; ++idx)
       {
-        ehrlich_aberth_jax::ehrlich_aberth_comp(deg, itmax, coeffs + idx * (deg + 1), roots + idx * deg, 
-                                                alpha, conv2, points, hull);
+        if (custom_init){
+        ehrlich_aberth_jax::ehrlich_aberth_comp(deg, itmax, custom_init, coeffs + idx * (deg + 1), roots_init + idx*deg,
+            roots + idx * deg, alpha, conv, points, hull);
+        }
+        else {
+        ehrlich_aberth_jax::ehrlich_aberth_comp(deg, itmax, custom_init, coeffs + idx * (deg + 1),nullptr,
+            roots + idx * deg, alpha, conv, points, hull);
+
+        }
+ 
       }
     }
     else

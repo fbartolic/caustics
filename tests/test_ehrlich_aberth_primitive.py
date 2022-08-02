@@ -12,6 +12,7 @@ from caustics.ehrlich_aberth_primitive import poly_roots
 from caustics.point_source_magnification import _poly_coeffs_binary
 
 
+config.update("jax_platform_name", "cpu")
 config.update("jax_enable_x64", True)
 
 
@@ -43,7 +44,6 @@ def test_poly_roots_jit(get_coeffs):
 
 def test_poly_roots_vmap(get_coeffs):
     coeffs = get_coeffs
-    roots = poly_roots(coeffs)
 
     # Batch over the first dimension
     res = vmap(poly_roots)(coeffs)
@@ -58,7 +58,6 @@ def test_poly_roots_vmap(get_coeffs):
 
 def test_poly_roots_grad(get_coeffs):
     coeffs = get_coeffs
-    roots = poly_roots(coeffs)
 
     fn = lambda c: poly_roots(c).sum()
 

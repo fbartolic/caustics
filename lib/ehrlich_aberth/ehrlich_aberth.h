@@ -147,31 +147,13 @@ namespace ehrlich_aberth_jax
       // This will halt kernel execution
       assert(!s);
     }
-
-//    if (custom_init){
-//    // Iterate over all roots and for each root i if there is another roots j such that 
-//    // thrust::abs(roots[i]-roots_init[i]) < thrust::abs(roots[i]-roots_init[j]) 
-//    // permute the ordering of roots[i] and roots[j]
-//    for (int i = 0; i < deg; i++)
-//    {
-//      for (int j = 0; j < deg; j++)
-//      {
-//        if (thrust::abs(roots[j] - roots_init[i]) < thrust::abs(roots[i] - roots_init[i]))
-//        {
-//          complex temp = roots[i];
-//          roots[i] = roots[j];
-//          roots[j] = temp;
-//        }
-//      }
-//    }
-//    }
-
   }
 
   /* ehrlich_aberth with compensated arithmetic*/
   EHRLICH_ABERTH_JAX_INLINE_OR_DEVICE void ehrlich_aberth_comp(const unsigned int deg,
                                                                const unsigned int itmax,
-                                                               const complex *poly, complex *roots,
+                                                               const bool custom_init,
+                                                               const complex *poly, const complex *roots_init, complex *roots,
                                                                double *alpha, point_conv *conv,
                                                                point *points, point *hull)
   {
@@ -192,7 +174,19 @@ namespace ehrlich_aberth_jax
       conv[i].y = false;
     }
     alpha[deg] = thrust::abs(poly[deg]);
-    init_est(alpha, deg, roots, points, hull);
+
+    // If custom_init is false do init_est
+    if (!custom_init)
+    {
+      init_est(alpha, deg, roots, points, hull);
+    }
+    else {
+      for (int i = 0; i < deg; i++)
+      {
+        roots[i] = roots_init[i];
+      }
+    }
+
     // update initial estimates
     for (int i = 0; i <= deg; i++)
     {
