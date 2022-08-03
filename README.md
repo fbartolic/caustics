@@ -4,13 +4,13 @@
 `caustics` enables computation of microlensing light curves for binary and triple lens systems using the method of [contour integration](https://academic.oup.com/mnras/article-abstract/503/4/6143/6149166?redirectedFrom=fulltext&login=false). It is built on top of the [JAX](https://github.com/google/jax) library which enables efficient computation of *exact* gradients of the `casustics` outputs with respect to all input parameters through the use of [automatic differentiation](https://jax.readthedocs.io/en/latest/notebooks/autodiff_cookbook.html). 
 
 ## Installation
-`caustics` is still being actively developed and is not yet released on PyPI. To install the development version clone this repository, 
+`caustics` is still being actively developed and is not yet released on PyPI. To install the development version, clone this repository, 
 create a new `conda` environment, `cd` into the repository and run 
 ```python
 conda env update --file environment.yml && pip install .
 ```
 
-`caustics` does not currently support Apple M1 processors except via Rosetta. To install it open the terminal through Rosetta
+`caustics` does not currently support Apple M1 processors except via Rosetta emulation. To install it open the terminal through Rosetta
 and the command from above.
 
 ## Features
