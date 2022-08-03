@@ -11,11 +11,16 @@ from caustics import (
     mag_point_source,
 )
 
-import VBBinaryLensing
+import MulensModel as mm
 
-VBBL = VBBinaryLensing.VBBinaryLensing()
-VBBL.RelTol = 1e-10
+def mag_vbb_binary_ps(w0, a, e1):
+    e2 = 1 - e1
+    x_cm = (e1 - e2)*a
+    bl = mm.BinaryLens(e2, e1, 2*a)
+    return bl.point_source_magnification(w0.real - x_cm, w0.imag)
 
+
+config.update("jax_platform_name", "cpu")
 config.update("jax_enable_x64", True)
 
 
@@ -25,14 +30,11 @@ def get_data():
     e1 = 0.8
     e2 = 1.0 - e1
 
-    q = e1 / e2
-    x_cm = (e1 - e2) * a
-
-    return a, e1, q, x_cm
+    return a, e1
 
 
 def test_mag_point_source_binary(get_data):
-    a, e1, q, x_cm = get_data
+    a, e1 = get_data
 
     width = 1.0
     npts = 50
@@ -47,18 +49,12 @@ def test_mag_point_source_binary(get_data):
     mag_vbb = np.zeros(wgrid.shape)
     for i in range(wgrid.shape[0]):
         for j in range(wgrid.shape[1]):
-            mag_vbb[i, j] = VBBL.BinaryMag0(
-                2 * a,
-                q,
-                jnp.real(wgrid[i, j]) - x_cm,
-                jnp.imag(wgrid[i, j]),
-            )
-
+            mag_vbb[i, j] = mag_vbb_binary_ps(wgrid[i, j], a, e1)
     np.testing.assert_allclose(mag, mag_vbb, atol=1e-10)
 
 
 def test_mag_point_source_grad(get_data):
-    a, e1, _, _ = get_data
+    a, e1 = get_data
 
     # Check gradient of mag. with respect to lens separation
     fn = lambda a: mag_point_source(jnp.array([0.0 + 0.1j])[0], nlenses=2, a=a, e1=e1)
