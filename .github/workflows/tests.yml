@@ -1,0 +1,36 @@
+name: tests
+
+on: [push]
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    strategy:
+      max-parallel: 5
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python 3.10
+      uses: actions/setup-python@v3
+      with:
+        python-version: 3.10
+    - name: Install environment
+      run: |
+        # $CONDA is an environment variable pointing to the root of the miniconda directory
+        echo $CONDA/bin >> $GITHUB_PATH
+    - name: Install dependencies
+      run: |
+        conda env update --file environment.yml --name base
+        conda install pytest
+    - name: Install package
+      run: |
+        python -m pip install --upgrade pip
+        pip install --quiet .
+    - name: Root solver tests
+      run: pytest --quiet tests/test_ehrlich_aberth_primitive.py
+    - name: Point source tests
+      run: pytest --quiet tests/test_point_source_magnification.py  
+    - name: Utils tests
+      run: pytest --quiet tests/test_utils.py  
+    - name: Extended source tests
+      run: pytest --quiet tests/test_extended_source_magnification.py  
