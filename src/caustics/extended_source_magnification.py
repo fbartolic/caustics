@@ -192,8 +192,8 @@ def _images_of_source_limb(
             delta_z,
             jnp.zeros_like(delta_z.real),
         )
-        idcs_maxdelta = jnp.argsort(delta_z.reshape(-1))[::-1][:n]
-        _, idcs_theta = jnp.unravel_index(idcs_maxdelta, delta_z.shape)
+        delta_z_max = jnp.max(delta_z, axis=0) # max over images at each phi_n
+        idcs_theta = jnp.argsort(delta_z_max)[::-1][:n]
 
         # Add new points at the midpoints of the top-ranking intervals
         theta_new = 0.5 * (theta[idcs_theta] + theta[idcs_theta + 1])
@@ -347,16 +347,16 @@ def _get_segments(z, z_mask, z_parity, nlenses=2):
     )
 
     # Set open segments to NaN if the pointwise parity for each segment is not
-    # consistent
-    cond_parity = jnp.all(
-        jnp.all(segments_open[:, 1, :].real >= 0.0, axis=1)
-        | jnp.all(segments_open[:, 1, :].real <= 0, axis=1),
-    )
-    segments_open = lax.cond(
-        cond_parity,
-        lambda: segments_open,
-        lambda: segments_open * jnp.nan,
-    )
+    # consistent TODO: think about how to avoid this issue entirely
+#    cond_parity = jnp.all(
+#        jnp.all(segments_open[:, 1, :].real >= 0.0, axis=1)
+#        | jnp.all(segments_open[:, 1, :].real <= 0, axis=1),
+#    )
+#    segments_open = lax.cond(
+#        cond_parity,
+#        lambda: segments_open,
+#        lambda: segments_open * jnp.nan,
+#    )
 
     return segments_closed, segments_open, all_closed
 
