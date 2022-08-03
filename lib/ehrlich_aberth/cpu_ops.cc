@@ -46,11 +46,11 @@ namespace
       {
         if (custom_init){
         ehrlich_aberth_jax::ehrlich_aberth_comp(deg, itmax, custom_init, coeffs + idx * (deg + 1), roots_init + idx*deg,
-            roots + idx * deg, alpha, conv, points, hull);
+            roots + idx * deg, alpha, conv2, points, hull);
         }
         else {
         ehrlich_aberth_jax::ehrlich_aberth_comp(deg, itmax, custom_init, coeffs + idx * (deg + 1),nullptr,
-            roots + idx * deg, alpha, conv, points, hull);
+            roots + idx * deg, alpha, conv2, points, hull);
 
         }
  
