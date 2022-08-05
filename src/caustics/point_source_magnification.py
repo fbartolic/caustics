@@ -10,7 +10,7 @@ from functools import partial
 
 import numpy as np
 import jax.numpy as jnp
-from jax import jit
+from jax import jit, lax
 
 from .ehrlich_aberth_primitive import poly_roots
 
@@ -1651,7 +1651,7 @@ def images_point_source(
 
     # Compute roots
     if custom_init:
-        roots = poly_roots(
+        z = poly_roots(
             coeffs,
             itmax=roots_itmax,
             compensated=roots_compensated,
@@ -1659,20 +1659,74 @@ def images_point_source(
             roots_init=z_init,
         )
     else:
-        roots = poly_roots(
+        z = poly_roots(
             coeffs,
             itmax=roots_itmax,
             compensated=roots_compensated,
         )
-    roots = jnp.moveaxis(roots, -1, 0)
+    z = jnp.moveaxis(z, -1, 0)
 
     # Evaluate the lens equation at the roots
-    lens_eq_eval = lens_eq(roots, nlenses=nlenses, **params) - w
+    lens_eq_eval = lens_eq(z, nlenses=nlenses, **params) - w
 
     # Mask out roots which don't satisfy the lens equation
-    mask_solutions = jnp.abs(lens_eq_eval) < 1e-5
+    z_mask = jnp.abs(lens_eq_eval) < 1e-5
 
-    return roots, mask_solutions
+    return z, z_mask 
+
+@partial(
+    jit, static_argnames=("nlenses", "roots_itmax", "roots_compensated")
+)
+def _images_point_source_sequential(
+    w,  
+    nlenses=2,
+    roots_itmax=2500,
+    roots_compensated=False,
+    **params,
+):
+    """
+    Same as `images_point_source` except w is a 1D arrray and the images 
+    are computed sequentially using `lax.scan` such that the first set 
+    of images is initialized using the default initialization and the 
+    subsequent images are initialized using the previous images as a starting
+    point.
+    """
+
+    def fn(w, z_init=None, custom_init=False):
+        if custom_init:
+            z, z_mask = images_point_source(
+                w,
+                nlenses=nlenses,
+                roots_itmax=roots_itmax,
+                roots_compensated=roots_compensated,
+                z_init=z_init,
+                custom_init=True,
+                **params,
+            )
+        else:
+            z, z_mask = images_point_source(
+                w,
+                nlenses=nlenses,
+                roots_itmax=roots_itmax,
+                roots_compensated=roots_compensated,
+                **params,
+            )
+        return z, z_mask
+
+    z_first, z_mask_first = fn(w[0])
+
+    def body_fn(z_prev, w):
+        z, z_mask = fn(w, z_init=z_prev, custom_init=True)
+        return z, (z, z_mask)
+
+    _, xs = lax.scan(body_fn, z_first, w[1:])
+    z, z_mask = xs
+
+    # Append to the initial point
+    z = jnp.concatenate([z_first[None, :], z])
+    z_mask = jnp.concatenate([z_mask_first[None, :], z_mask])
+
+    return z.T, z_mask.T  
 
 
 @partial(jit, static_argnames=("nlenses", "roots_itmax", "roots_compensated"))

@@ -28,51 +28,8 @@ from .utils import (
 
 from .point_source_magnification import (
     lens_eq_det_jac,
+    _images_point_source_sequential,
 )
-
-
-@partial(jit, static_argnums=(3, 4, 5))
-def _eval_images_sequentially(
-    theta, w0, rho, nlenses, roots_compensated, roots_itmax, **params
-):
-    def fn(theta, z_init=None, custom_init=False):
-        if custom_init:
-            z, z_mask = images_point_source(
-                rho * jnp.exp(1j * theta) + w0,
-                nlenses=nlenses,
-                roots_itmax=roots_itmax,
-                roots_compensated=roots_compensated,
-                z_init=z_init,
-                custom_init=True,
-                **params,
-            )
-        else:
-            z, z_mask = images_point_source(
-                rho * jnp.exp(1j * theta) + w0,
-                nlenses=nlenses,
-                roots_itmax=roots_itmax,
-                roots_compensated=roots_compensated,
-                **params,
-            )
-        det = lens_eq_det_jac(z, nlenses=nlenses, **params)
-        z_parity = jnp.sign(det)
-        return z, z_mask, z_parity
-
-    z_first, z_mask_first, z_parity_first = fn(theta[0])
-
-    def body_fn(z_prev, theta):
-        z, z_mask, z_parity = fn(theta, z_init=z_prev, custom_init=True)
-        return z, (z, z_mask, z_parity)
-
-    _, xs = lax.scan(body_fn, z_first, theta[1:])
-    z, z_mask, z_parity = xs
-
-    # Append to the initial point
-    z = jnp.concatenate([z_first[None, :], z])
-    z_mask = jnp.concatenate([z_mask_first[None, :], z_mask])
-    z_parity = jnp.concatenate([z_parity_first[None, :], z_parity])
-
-    return z.T, z_mask.T, z_parity.T
 
 
 @jit
@@ -159,7 +116,7 @@ def _images_of_source_limb(
         z, z_mask = images_point_source(
             rho * jnp.exp(1j * theta) + w0,
             nlenses=nlenses,
-            roots_itmax=2500,
+            roots_itmax=roots_itmax,
             roots_compensated=roots_compensated,
             z_init=z_init.T,
             custom_init=True,
@@ -173,9 +130,10 @@ def _images_of_source_limb(
     npts_init = int(0.5 * npts)
     theta = jnp.linspace(-np.pi, np.pi, npts_init - 1, endpoint=False)
     theta = jnp.pad(theta, (0, 1), constant_values=np.pi - 1e-8)
-    z, z_mask, z_parity = _eval_images_sequentially(
-        theta, w0, rho, nlenses, roots_compensated, roots_itmax, **params
+    z, z_mask = _images_point_source_sequential(
+        rho * jnp.exp(1j * theta) + w0, nlenses=nlenses, roots_itmax=roots_itmax, **params
     )
+    z_parity = jnp.sign(lens_eq_det_jac(z, nlenses=nlenses, **params))
 
     # Refine sampling by adding npts_init additional points a fraction
     # 1 / niter at a time
