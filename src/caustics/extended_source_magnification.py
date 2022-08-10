@@ -594,39 +594,45 @@ def _merge_open_segments(
             seg_active, segments[idx4], tidx_active, tidcs[idx4], ctype4
         )
 
-        # Select the closest segment that satisfies the connection condition
-        idx_best = first_nonzero(
-            jnp.array([success1, success2, success3, success4]).astype(float)
-        )
-        seg_best = jnp.stack(
-            [segments[idx1], segments[idx2], segments[idx3], segments[idx4]]
-        )[idx_best]
-        tidx_best = jnp.stack([tidcs[idx1], tidcs[idx2], tidcs[idx3], tidcs[idx4]])[
-            idx_best
-        ]
-        ctype = jnp.stack([ctype1, ctype2, ctype3, ctype4])[idx_best]
+        def branch1(segments, tidcs):
+            # Select the closest segment that satisfies the connection condition
+            idx_best = first_nonzero(
+                jnp.array([success1, success2, success3, success4]).astype(float)
+            )
+            seg_best = jnp.stack(
+                [segments[idx1], segments[idx2], segments[idx3], segments[idx4]]
+            )[idx_best]
+            tidx_best = jnp.stack([tidcs[idx1], tidcs[idx2], tidcs[idx3], tidcs[idx4]])[
+                idx_best
+            ]
+            ctype = jnp.stack([ctype1, ctype2, ctype3, ctype4])[idx_best]
 
-        # Merge that segment with the active segment
-        seg_active_new, tidx_active_new = _merge_two_segments(
-            seg_active,
-            seg_best,
-            tidx_active,
-            tidx_best,
-            ctype,
+            # Merge that segment with the active segment
+            seg_active_new, tidx_active_new = _merge_two_segments(
+                seg_active,
+                seg_best,
+                tidx_active,
+                tidx_best,
+                ctype,
+            )
+
+            # Zero-out the segment that was merged
+            idx_seg = jnp.array([idx1, idx2, idx3, idx4])[idx_best]
+            segments = segments.at[idx_seg].set(
+                jnp.zeros_like(segments[0]), segments[idx1]
+            )
+            return seg_active_new, tidx_active_new, segments, tidcs
+
+        def branch2(segments, tidcs):
+            return seg_active, tidx_active, segments, tidcs
+
+        return lax.cond(
+            jnp.any(jnp.array([success1, success2, success3, success4])),
+            branch1,
+            branch2,
+            segments,tidcs
         )
 
-        # Zero-out the segment that was merged
-        idx_best = jnp.array([idx1, idx2, idx3, idx4])[idx_best]
-        segments = segments.at[idx_best].set(
-            jnp.zeros_like(segments[0]), segments[idx1]
-        )
-
-        return (
-            seg_active_new,
-            tidx_active_new,
-            segments,
-            tidcs,
-        )
 
     def body_fn(carry, _):
         # Get the active segment, the index of its tail and all the other
@@ -653,11 +659,6 @@ def _merge_open_segments(
     # Compute tail index for each segment
     tail_idcs = vmap(last_nonzero)(segments[:, 0, :].real)
 
-    # Sort open segments such that the shortest segments appear first
-    segment_lengths = vmap(_get_segment_length)(segments, tail_idcs)
-    _idcs = sparse_argsort(segment_lengths)
-    segments, tail_idcs = segments[_idcs], tail_idcs[_idcs]
-
     # Pad segments with zeros to make room for merged segments as this array
     # be modified in place
     # WARNING: this will fail silently if a contour is longer than 3*segments.shape[-1]
@@ -670,6 +671,11 @@ def _merge_open_segments(
     segments_merged_list = []
 
     for i in range(max_nr_of_contours):
+        # Sort open segments such that the shortest segments appear first
+        segment_lengths = vmap(_get_segment_length)(segments, tail_idcs)
+        _idcs = sparse_argsort(segment_lengths)
+        segments, tail_idcs = segments[_idcs], tail_idcs[_idcs]
+
         idcs = jnp.arange(0, max_nr_of_segments_in_contour)
         init = (segments[0], tail_idcs[0], segments[1:], tail_idcs[1:])
         carry, _ = lax.scan(body_fn, init, idcs)
