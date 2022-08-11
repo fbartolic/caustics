@@ -165,12 +165,14 @@ def _images_of_source_limb(
 
     # Get rid of duplicate values of images which may occur in rare cases
     # by adding a very small random perturbation to the images
-    _, c = jnp.unique(z.reshape(-1), return_counts=True, size=len(z.reshape(-1)))
-    c = c.reshape(z.shape)
-    mask_dup = c > 1
+    z_flat = z.reshape(-1)
+    _, ix = jnp.unique(z_flat, return_index=True, size=len(z_flat))
+    mask_dup = jnp.full(z_flat.shape, True)
+    mask_dup = mask_dup.at[ix].set(False).reshape(z.shape)
+
     z = jnp.where(
         mask_dup,
-        z + random.uniform(key, shape=z.shape, minval=1e-9, maxval=1e-9),
+        z + random.uniform(key, shape=z.shape, minval=-1e-9, maxval=1e-9),
         z,
     )
 

@@ -53,8 +53,10 @@ def mag_vbb_binary(w0, rho, a, e1, u1=0.0, accuracy=1e-05):
 
 
 def count_duplicates(a):
-    u, c = jnp.unique(a, return_counts=True)
-    return (c > 1).sum()
+    _, ix = jnp.unique(a, return_index=True, size=len(a))
+    mask = jnp.full(a.shape, True)
+    mask = mask.at[ix].set(False)
+    return mask.sum()
 
 
 @pytest.mark.parametrize("rho", [1e-01, 1e-02, 1e-03])
