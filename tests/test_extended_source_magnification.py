@@ -122,7 +122,7 @@ def test_mag_extended_source_single_unif(rho, rtol=1e-03):
 @pytest.mark.parametrize("rho", [1.0, 1e-01, 1e-02])
 def test_mag_extended_source_single_ld(rho, rtol=1e-03):
     npts_limb = 300
-    npts_ld = 150
+    npts_ld = 100
     u1 = 0.7
     w_points = jnp.linspace(0.0, 3.0 * rho, 11)
 
@@ -143,16 +143,17 @@ def test_mag_extended_source_single_ld(rho, rtol=1e-03):
 
 
 def test_split_single_segment():
-    x = jnp.array([0.0, 1.0, 2.0, 3.0, 0.0, 4.0, 5.0, 0.0, 0.0, 6.0]).astype(
+    x = jnp.array([0.0, 1.0, 1.01, 1.02, 0.0, 4.0, 4.01, 0.0, 0.0, 6.0]).astype(
         jnp.complex128
     )
-    res = _split_single_segment(x[None, :], n_parts=5)[:, 0, :].real
+    x = jnp.stack([x, x])
+    res = _split_single_segment(x, n_parts=5)[:, 0, :].real
 
     np.testing.assert_equal(
-        res[0], np.array([0.0, 1.0, 2.0, 3.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        res[0], np.array([0.0, 1.0, 1.01, 1.02, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
     )
     np.testing.assert_equal(
-        res[1], np.array([0.0, 0.0, 0.0, 0.0, 0.0, 4.0, 5.0, 0.0, 0.0, 0.0])
+        res[1], np.array([0.0, 0.0, 0.0, 0.0, 0.0, 4.0, 4.01, 0.0, 0.0, 0.0])
     )
     np.testing.assert_equal(
         res[2], np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 6.0])

@@ -847,7 +847,7 @@ def mag_extended_source(
             jnp.moveaxis(jnp.stack([z, z_parity]), 0, 1)
         )
         tail_idcs = jnp.array([z.shape[1] - 1, z.shape[1] - 1])
-        I = vmap(_integrate_unif)(contours, tail_idcs)
+        I = vmap(integrate)(contours, tail_idcs)
         return jnp.abs(jnp.sum(I * contours_p)) / (np.pi * rho**2)
 
     # For N = 2 we first have to obtain segments and then convert those to
