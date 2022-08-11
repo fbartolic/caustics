@@ -845,6 +845,7 @@ def mag_extended_source(
     # For N = 2 we first have to obtain segments and then convert those to
     # closed contours
     elif (nlenses == 2) or (nlenses == 3):
+        max_nr_of_contours = 2
         # Get segments. If `all_closed` is True there are no caustic crossings
         # and everything is easy
         segments_closed, segments_open, all_closed = _get_segments(
@@ -857,20 +858,22 @@ def mag_extended_source(
         # Integrate over contours obtained from closed segments
         tail_idcs = jnp.repeat(contours1.shape[1] - 1, contours1.shape[0])
         I1 = vmap(integrate)(contours1, tail_idcs)
-        mag1 = jnp.abs(jnp.sum(I1 * contours_p1)) / (np.pi * rho**2)
+        mags1 = I1 * contours_p1
 
         # If there are caustic crossings things are a lot more complicated and
         # we have to stitch together the open segments to form closed contours.
-        branch1 = lambda segments: 0.0
+        branch1 = lambda _: jnp.zeros(max_nr_of_contours)
 
         def branch2(segments):
-            contours, contours_p = _contours_from_open_segments(segments)
+            contours, contours_p = _contours_from_open_segments(
+                segments, max_nr_of_contours=max_nr_of_contours
+            )
             tail_idcs = vmap(last_nonzero)(contours.real)
             I = vmap(integrate)(contours, tail_idcs)
-            return jnp.abs(jnp.sum(I * contours_p)) / (np.pi * rho**2)
+            return I * contours_p
 
-        mag2 = lax.cond(all_closed, branch1, branch2, segments_open)
-        mag = mag1 + mag2
+        mags2 = lax.cond(all_closed, branch1, branch2, segments_open)
+        mag = jnp.abs(mags1.sum() + mags2.sum()) / (np.pi * rho**2)
 
         return mag
 
