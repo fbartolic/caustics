@@ -174,6 +174,11 @@ def _images_of_source_limb(
         z,
     )
 
+#    idcs = jnp.argsort(z_mask, axis=0)[::-1, :]
+#    z = jnp.take_along_axis(z, idcs, axis=0)
+#    z_mask = jnp.take_along_axis(z_mask, idcs, axis=0)
+#    z_parity = jnp.take_along_axis(z_parity, idcs, axis=0)
+
     # Permute images
     z, z_mask, z_parity = _permute_images(z, z_mask, z_parity)
 
@@ -195,10 +200,34 @@ def _split_single_segment(segment, n_parts=5):
         idcs = jnp.flatnonzero(m0[1:] != m0[:-1], size=2 * n_parts)
         return idcs[::2], idcs[1::2]
 
-    mask_nonzero = jnp.abs(segment[0].real) > 0.0
+    # First, construct a mask indicating all the real images (False images have 
+    # been zeroed out previously)
+    mask_split = jnp.abs(segment[0].real) > 0.0
+
+    # Second, in rare cases the point source image matching algorithm fails
+    # to connect images properly and there will be a continous set of real
+    # points source images not belonging to the same contour. To avoid this error
+    # we check if there are sudden jumps in the segment between consecutive 
+    # real images and we insert a zero at one of the points
+    z, z_mask = segment
+    z_mask = z_mask.astype(bool)
+
+    z_n = z[:-1]
+    z_np1 = z[1:]
+    z_mask_n = z_mask[:-1]
+    z_mask_np1 = z_mask[1:]
+
+    z_diff = jnp.abs(z_np1 - z_n)
+    mask_jump = z_diff < 0.1
+    mask_split = jnp.where(
+        ~mask_jump & z_mask_n & z_mask_np1,
+        mask_jump,
+        mask_split[:-1] 
+    )
+    mask_split = jnp.concatenate([mask_split, jnp.atleast_1d(z_mask[-1])])
 
     # Split into n_parts parts
-    idcs_start, idcs_end = separate_regions(mask_nonzero)
+    idcs_start, idcs_end = separate_regions(mask_split)
 
     n = jnp.arange(npts)
 
@@ -219,7 +248,7 @@ def _split_single_segment(segment, n_parts=5):
 @partial(jit, static_argnames=("nr_of_segments"))
 def _process_segments(segments, nr_of_segments=20):
     """
-    Process raw contour segments such that each segment is contigous (meaning
+    Process raw contour segments such that each segment is contiguous (meaning
     that there are no gaps between the segments head and tail) and that the head
     of the segment is at the 0th index in the array. The resultant number of
     segments is in general greater than the number of images and is at most
@@ -278,7 +307,7 @@ def _get_segments(z, z_mask, z_parity, nlenses=2):
             not cross the critical curve).
     """
     n_images = nlenses**2 + 1
-    nr_of_segments = 2 * n_images
+    nr_of_segments = 3 * n_images
 
     # Apply mask and bundle the images and parity into a single array
     z = z * z_mask
@@ -303,18 +332,6 @@ def _get_segments(z, z_mask, z_parity, nlenses=2):
         lambda s: _process_segments(s, nr_of_segments=nr_of_segments),
         segments_open,
     )
-
-    # Set open segments to NaN if the pointwise parity for each segment is not
-    # consistent TODO: think about how to avoid this issue entirely
-#    cond_parity = jnp.all(
-#        jnp.all(segments_open[:, 1, :].real >= 0.0, axis=1)
-#        | jnp.all(segments_open[:, 1, :].real <= 0, axis=1),
-#    )
-#    segments_open = lax.cond(
-#        cond_parity,
-#        lambda: segments_open,
-#        lambda: segments_open * jnp.nan,
-#    )
 
     return segments_closed, segments_open, all_closed
 
@@ -513,7 +530,7 @@ def _merge_two_segments(seg1, seg2, tidx1, tidx2, ctype):
 )
 def _merge_open_segments(
     segments,
-    max_nr_of_contours=2,
+    max_nr_of_contours=3,
     max_nr_of_segments_in_contour=10,
 ):
     """
@@ -710,8 +727,8 @@ def _contours_from_closed_segments(segments):
 )
 def _contours_from_open_segments(
     segments,
-    max_nr_of_contours=2,
-    max_nr_of_segments_in_contour=10,
+    max_nr_of_contours=3,
+    max_nr_of_segments_in_contour=20,
 ):
     """
     Given a set of open image segments, some of which may be open, return
@@ -845,7 +862,7 @@ def mag_extended_source(
     # For N = 2 we first have to obtain segments and then convert those to
     # closed contours
     elif (nlenses == 2) or (nlenses == 3):
-        max_nr_of_contours = 2
+        max_nr_of_contours = 3
         # Get segments. If `all_closed` is True there are no caustic crossings
         # and everything is easy
         segments_closed, segments_open, all_closed = _get_segments(
