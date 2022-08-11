@@ -1670,7 +1670,7 @@ def images_point_source(
     lens_eq_eval = lens_eq(z, nlenses=nlenses, **params) - w
 
     # Mask out roots which don't satisfy the lens equation
-    z_mask = jnp.abs(lens_eq_eval) < 1e-5
+    z_mask = jnp.abs(lens_eq_eval) < 1e-6
 
     return z, z_mask 
 
