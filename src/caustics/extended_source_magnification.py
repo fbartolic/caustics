@@ -174,11 +174,6 @@ def _images_of_source_limb(
         z,
     )
 
-#    idcs = jnp.argsort(z_mask, axis=0)[::-1, :]
-#    z = jnp.take_along_axis(z, idcs, axis=0)
-#    z_mask = jnp.take_along_axis(z_mask, idcs, axis=0)
-#    z_parity = jnp.take_along_axis(z_parity, idcs, axis=0)
-
     # Permute images
     z, z_mask, z_parity = _permute_images(z, z_mask, z_parity)
 
@@ -593,9 +588,6 @@ def _merge_open_segments(
         ctype3, idx3 = jnp.unravel_index(
             jnp.argsort(distances.reshape(-1))[2], distances.shape
         )
-        ctype4, idx4 = jnp.unravel_index(
-            jnp.argsort(distances.reshape(-1))[3], distances.shape
-        )
 
         # Evaluate the connection conditions for each of the four closest segments
         success1 = _connection_condition(
@@ -607,22 +599,19 @@ def _merge_open_segments(
         success3 = _connection_condition(
             seg_active, segments[idx3], tidx_active, tidcs[idx3], ctype3
         )
-        success4 = _connection_condition(
-            seg_active, segments[idx4], tidx_active, tidcs[idx4], ctype4
-        )
 
         def branch1(segments, tidcs):
             # Select the closest segment that satisfies the connection condition
             idx_best = first_nonzero(
-                jnp.array([success1, success2, success3, success4]).astype(float)
+                jnp.array([success1, success2, success3]).astype(float)
             )
             seg_best = jnp.stack(
-                [segments[idx1], segments[idx2], segments[idx3], segments[idx4]]
+                [segments[idx1], segments[idx2], segments[idx3]]
             )[idx_best]
-            tidx_best = jnp.stack([tidcs[idx1], tidcs[idx2], tidcs[idx3], tidcs[idx4]])[
+            tidx_best = jnp.stack([tidcs[idx1], tidcs[idx2], tidcs[idx3]])[
                 idx_best
             ]
-            ctype = jnp.stack([ctype1, ctype2, ctype3, ctype4])[idx_best]
+            ctype = jnp.stack([ctype1, ctype2, ctype3])[idx_best]
 
             # Merge that segment with the active segment
             seg_active_new, tidx_active_new = _merge_two_segments(
@@ -634,7 +623,7 @@ def _merge_open_segments(
             )
 
             # Zero-out the segment that was merged
-            idx_seg = jnp.array([idx1, idx2, idx3, idx4])[idx_best]
+            idx_seg = jnp.array([idx1, idx2, idx3])[idx_best]
             segments = segments.at[idx_seg].set(
                 jnp.zeros_like(segments[0]), segments[idx1]
             )
@@ -644,7 +633,7 @@ def _merge_open_segments(
             return seg_active, tidx_active, segments, tidcs
 
         return lax.cond(
-            jnp.any(jnp.array([success1, success2, success3, success4])),
+            jnp.any(jnp.array([success1, success2, success3])),
             branch1,
             branch2,
             segments,tidcs
