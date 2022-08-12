@@ -33,16 +33,18 @@ from .point_source_magnification import (
 
 
 @jit
-def _match_two_sets_of_images(a, b):
+def _match_points(a, b):
     """
-    For each image in a and find the index of the closest image in b. This
-    procedure is not guaranteed to find a permutation of b which minimizes
-    the sum of elementwise distances between every element of a and b but
-    it is good enough.
+    Iterate over elements of a in order and find the index of the closest 
+    element in b in distance. Return indices which permute b.
+    
+    This algorithm is not guaranteed to find a permutation of b which minimizes 
+    the sum of elementwise distances between every element of a and b 
+    (linear sum assignment problem).
 
     Args:
-        a (array_like): 1D array.
-        b (array_like): 1D array.
+        a (array_like): 1D array of complex numbers.
+        b (array_like): 1D array of complex numbers.
 
     Returns:
         array_like: Indices which specify a permutation of b.
@@ -70,13 +72,13 @@ def _permute_images(z, z_mask, z_parity):
     """
     xs = jnp.stack([z, z_mask, z_parity])
 
-    def apply_match_two_sets_of_images(carry, xs):
+    def apply_match_points(carry, xs):
         z, z_mask, z_parity = xs
-        idcs = _match_two_sets_of_images(carry, z)
+        idcs = _match_points(carry, z)
         return z[idcs], jnp.stack([z[idcs], z_mask[idcs], z_parity[idcs]])
 
     init = xs[0, :, 0]
-    _, xs = lax.scan(apply_match_two_sets_of_images, init, jnp.moveaxis(xs, -1, 0))
+    _, xs = lax.scan(apply_match_points, init, jnp.moveaxis(xs, -1, 0))
     z, z_mask, z_parity = jnp.moveaxis(xs, 1, 0)
 
     return z.T, z_mask.real.astype(bool).T, z_parity.T
