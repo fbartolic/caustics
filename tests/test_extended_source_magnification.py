@@ -355,7 +355,7 @@ def test_grad_mag_extended_source_binary(
     jac_finite_diff = approx_fprime(np.array([a, e1, rho, u1]), fn, epsilon=1e-09)
 
     err_fwd = jnp.abs((jac_fwd - jac_finite_diff)/jac_finite_diff)
-    err_rev = jnp.abs((jac_fwd - jac_finite_diff)/jac_finite_diff)
+    err_rev = jnp.abs((jac_rev - jac_finite_diff)/jac_finite_diff)
 
     assert jnp.all(err_fwd < rtol)
     assert jnp.all(err_rev < rtol)
