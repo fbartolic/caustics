@@ -84,6 +84,7 @@ def get_points_and_params_binary(rho, npts=50):
     _, caustic_curves = critical_and_caustic_curves(
         npts=npts, nlenses=2, a=a, e1=e1
     )
+    caustic_curves = caustic_curves.reshape(-1)
 
     # Generate random test points near the caustics
     key = random.PRNGKey(42)
@@ -99,6 +100,7 @@ def get_points_and_params_triple(rho, npts=50):
     _, caustic_curves = critical_and_caustic_curves(
         npts=npts, nlenses=3, a=a, e1=e1, e2=e2, r3=r3
     )
+    caustic_curves = caustic_curves.reshape(-1)
 
     # Generate random test points near the caustics
     key = random.PRNGKey(42)
@@ -331,6 +333,8 @@ def test_grad_mag_extended_source_binary(
     _, caustic_curves = critical_and_caustic_curves(
         npts=50, nlenses=2, a=a, e1=e1
     )
+    caustic_curves = caustic_curves.reshape(-1)
+
     w0 = caustic_curves[0]
 
     def fn(params):

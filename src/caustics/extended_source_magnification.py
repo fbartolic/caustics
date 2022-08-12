@@ -20,6 +20,7 @@ from .integrate import (
     _integrate_ld,
 )
 from .utils import (
+    match_points,
     first_nonzero,
     first_zero,
     last_nonzero,
@@ -30,35 +31,6 @@ from .point_source_magnification import (
     lens_eq_det_jac,
     _images_point_source_sequential,
 )
-
-
-@jit
-def _match_points(a, b):
-    """
-    Iterate over elements of a in order and find the index of the closest 
-    element in b in distance. Return indices which permute b.
-    
-    This algorithm is not guaranteed to find a permutation of b which minimizes 
-    the sum of elementwise distances between every element of a and b 
-    (linear sum assignment problem).
-
-    Args:
-        a (array_like): 1D array of complex numbers.
-        b (array_like): 1D array of complex numbers.
-
-    Returns:
-        array_like: Indices which specify a permutation of b.
-    """
-    # First guess
-    vals = jnp.argsort(jnp.abs(b - a[:, None]), axis=1)
-    idcs = []
-    for i, idx in enumerate(vals[:, 0]):
-        # If index is duplicate choose the next best solution
-        mask = ~jnp.isin(vals[i], jnp.array(idcs), assume_unique=True)
-        idx = vals[i, first_nonzero(mask)]
-        idcs.append(idx)
-
-    return jnp.array(idcs)
 
 
 @jit
@@ -74,7 +46,7 @@ def _permute_images(z, z_mask, z_parity):
 
     def apply_match_points(carry, xs):
         z, z_mask, z_parity = xs
-        idcs = _match_points(carry, z)
+        idcs = match_points(carry, z)
         return z[idcs], jnp.stack([z[idcs], z_mask[idcs], z_parity[idcs]])
 
     init = xs[0, :, 0]

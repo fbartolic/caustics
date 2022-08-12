@@ -13,6 +13,7 @@ import jax.numpy as jnp
 from jax import jit, lax
 
 from .ehrlich_aberth_primitive import poly_roots
+from .utils import match_points
 
 
 @jit
@@ -1593,25 +1594,37 @@ def lens_eq_det_jac(z, nlenses=2, **params):
 def critical_and_caustic_curves(npts=200, nlenses=2, **params):
     phi = jnp.linspace(-np.pi, np.pi, npts)
 
+    def apply_match_points(carry, z):
+        idcs = match_points(carry, z)
+        return z[idcs], z[idcs]
+
     if nlenses == 1:  # trivial
         return jnp.exp(-1j * phi), jnp.zeros(npts).astype(jnp.complex128)
 
-    elif nlenses == 2:
+    if nlenses == 2:
         a, e1 = params["a"], params["e1"]
         coeffs = jnp.moveaxis(_poly_coeffs_critical_binary(phi, a, e1), 0, -1)
-        critical_curves = poly_roots(coeffs).reshape(-1)
-        caustic_curves = lens_eq(critical_curves, nlenses=2, **params)
-        return critical_curves, caustic_curves
 
     elif nlenses == 3:
         a, r3, e1, e2 = params["a"], params["r3"], params["e1"], params["e2"]
         coeffs = jnp.moveaxis(_poly_coeffs_critical_triple(phi, a, r3, e1, e2), 0, -1)
-        critical_curves = poly_roots(coeffs).reshape(-1)
-        caustic_curves = lens_eq(critical_curves, nlenses=3, **params)
-        return critical_curves, caustic_curves
 
     else:
         raise ValueError("`nlenses` has to be set to be <= 3.")
+
+    # Compute roots
+    z_cr = poly_roots(coeffs)
+
+    # Permute roots so that they form contiguous curves
+    init = z_cr[0, :]
+    _, z_cr = lax.scan(apply_match_points, init, z_cr)
+    z_cr = z_cr.T
+
+    # Caustics are critical curves mapped by the lens equation
+    z_ca = lens_eq(z_cr, nlenses=nlenses, **params)
+
+    return z_cr, z_ca
+
 
 
 @partial(
