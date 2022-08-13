@@ -1771,13 +1771,13 @@ def mag_point_source(w, nlenses=2, roots_itmax=2500, roots_compensated=False, **
     Returns:
         array_like: The point source magnification evaluated at w.
     """
-    images, mask = images_point_source(
+    z, z_mask = images_point_source(
         w,
         nlenses=nlenses,
         roots_itmax=roots_itmax,
         roots_compensated=roots_compensated,
         **params
     )
-    det = lens_eq_det_jac(images, nlenses=nlenses, **params)
-    mag = (1.0 / jnp.abs(det)) * mask
+    det = lens_eq_det_jac(z, nlenses=nlenses, **params)
+    mag = (1.0 / jnp.abs(det)) * z_mask 
     return mag.sum(axis=0).reshape(w.shape)
