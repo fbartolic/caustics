@@ -1641,13 +1641,12 @@ def images_point_source(
 ):
     if nlenses == 1:
         w_abs_sq = w.real**2 + w.imag**2
-        w_bar = jnp.conjugate(w)
         #  Compute the image locations using the quadratic formula
         z1 = 0.5 * w * (1.0 + jnp.sqrt(1 + 4 / w_abs_sq))
         z2 = 0.5 * w * (1.0 - jnp.sqrt(1 + 4 / w_abs_sq))
         z = jnp.stack(jnp.array([z1, z2]))
 
-        return z, jnp.ones(z.shape).astype(bool)
+        return z, jnp.ones(z.shape).astype(jnp.bool_)
 
     elif nlenses == 2:
         a, e1 = params["a"], params["e1"]

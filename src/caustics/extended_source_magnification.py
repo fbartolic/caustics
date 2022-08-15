@@ -53,7 +53,7 @@ def _permute_images(z, z_mask, z_parity):
     _, xs = lax.scan(apply_match_points, init, jnp.moveaxis(xs, -1, 0))
     z, z_mask, z_parity = jnp.moveaxis(xs, 1, 0)
 
-    return z.T, z_mask.real.astype(bool).T, z_parity.T
+    return z.T, z_mask.real.astype(jnp.bool_).T, z_parity.T
 
 
 @partial(
@@ -181,7 +181,7 @@ def _split_single_segment(segment, n_parts=5):
     # we check if there are sudden jumps in the segment between consecutive 
     # real images and we insert a zero at one of the points
     z, z_mask = segment
-    z_mask = z_mask.astype(bool)
+    z_mask = z_mask.astype(jnp.bool_)
 
     z_n = z[:-1]
     z_np1 = z[1:]
@@ -229,7 +229,7 @@ def _process_segments(segments, nr_of_segments=20):
     segments = jnp.concatenate(vmap(_split_single_segment)(segments))
 
     # If a segment consists of less than 3 points, set it to zero
-    mask = jnp.sum((segments[:, 0] != 0 + 0j).astype(int), axis=1) < 3
+    mask = jnp.sum((segments[:, 0] != 0 + 0j).astype(jnp.int64), axis=1) < 3
     segments = segments * (~mask[:, None, None])
 
     # Sort segments such that the nonempty segments appear first and shrink array
@@ -579,7 +579,7 @@ def _merge_open_segments(
         def branch1(segments, tidcs):
             # Select the closest segment that satisfies the connection condition
             idx_best = first_nonzero(
-                jnp.array([success1, success2, success3]).astype(float)
+                jnp.array([success1, success2, success3]).astype(jnp.float64)
             )
             seg_best = jnp.stack(
                 [segments[idx1], segments[idx2], segments[idx3]]
