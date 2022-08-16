@@ -9,11 +9,9 @@ __all__ = [
     "mean_zero_avoiding",
     "sparse_argsort",
 ]
-from functools import partial
 import jax.numpy as jnp
-from jax import jit, lax
+from jax import lax
 
-@jit
 def match_points(a, b):
     """
     Iterate over elements of a in order and find the index of the closest 
@@ -42,12 +40,10 @@ def match_points(a, b):
     return jnp.array(idcs)
 
 
-@partial(jit, static_argnames=("axis"))
 def first_nonzero(x, axis=0):
     return jnp.argmax(x != 0.0, axis=axis)
 
 
-@partial(jit, static_argnames=("axis"))
 def last_nonzero(x, axis=0):
     return lax.cond(
         jnp.any(x, axis=axis),  # if any non-zero
@@ -57,12 +53,10 @@ def last_nonzero(x, axis=0):
     )
 
 
-@partial(jit, static_argnames=("axis"))
 def first_zero(x, axis=0):
     return jnp.argmax(x == 0.0, axis=axis)
 
 
-@jit
 def min_zero_avoiding(x):
     """
     Return the minimum  of a 1D array, avoiding 0.
@@ -73,7 +67,6 @@ def min_zero_avoiding(x):
     return jnp.where(cond, x[(x != 0).argmax(axis=0)], min_x)
 
 
-@jit
 def max_zero_avoiding(x):
     """
     Return the maximum  of a 1D array, avoiding 0.
@@ -84,18 +77,15 @@ def max_zero_avoiding(x):
     return jnp.where(cond, -min_zero_avoiding(jnp.abs(x)), max_x)
 
 
-@jit
 def mean_zero_avoiding(x):
     mask = x == 0.0
     return jnp.where(jnp.all(mask), 0.0, jnp.nanmean(jnp.where(mask, jnp.nan, x)))
 
 
-@jit
 def sparse_argsort(a):
     return jnp.where(a != 0, a, jnp.nan).argsort()
 
 
-@jit
 def trapz_zero_avoiding(y, x, tail_idx):
     """
     Same as jnp.trapz(y[:tail_idx + 1] x=x[:tail_idx + 1], axis=0).

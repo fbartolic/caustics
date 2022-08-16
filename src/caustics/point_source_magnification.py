@@ -15,8 +15,6 @@ from jax import jit, lax
 from .ehrlich_aberth_primitive import poly_roots
 from .utils import match_points
 
-
-@jit
 def _poly_coeffs_binary(w, a, e1):
     """
     Compute the coefficients of the complex polynomial equation corresponding
@@ -89,7 +87,6 @@ def _poly_coeffs_binary(w, a, e1):
     return jnp.moveaxis(p, 0, -1)
 
 
-@jit
 def _poly_coeffs_triple(w, a, r3, e1, e2):
     """
     Compute the coefficients of the complex polynomial equation corresponding
@@ -1483,7 +1480,6 @@ def _poly_coeffs_triple(w, a, r3, e1, e2):
     return jnp.moveaxis(p, 0, -1)
 
 
-@jit
 def _poly_coeffs_critical_binary(phi, a, e1):
     """
     Compute the coefficients of 2*Nth order polynomial which defines the critical
@@ -1500,7 +1496,6 @@ def _poly_coeffs_critical_binary(phi, a, e1):
     return p
 
 
-@jit
 def _poly_coeffs_critical_triple(phi, a, r3, e1, e2):
     x = jnp.exp(-1j * phi)
 
@@ -1539,8 +1534,6 @@ def _poly_coeffs_critical_triple(phi, a, r3, e1, e2):
 
     return p
 
-
-@partial(jit, static_argnames=("nlenses"))
 def lens_eq(z, nlenses=2, **params):
     zbar = jnp.conjugate(z)
 
@@ -1563,8 +1556,6 @@ def lens_eq(z, nlenses=2, **params):
     else:
         raise ValueError("`nlenses` has to be set to be <= 3.")
 
-
-@partial(jit, static_argnames=("nlenses"))
 def lens_eq_det_jac(z, nlenses=2, **params):
     zbar = jnp.conjugate(z)
 
@@ -1588,7 +1579,6 @@ def lens_eq_det_jac(z, nlenses=2, **params):
         )
     else:
         raise ValueError("`nlenses` has to be set to be <= 3.")
-
 
 @partial(jit, static_argnames=("npts", "nlenses"))
 def critical_and_caustic_curves(npts=200, nlenses=2, **params):
@@ -1624,7 +1614,6 @@ def critical_and_caustic_curves(npts=200, nlenses=2, **params):
     z_ca = lens_eq(z_cr, nlenses=nlenses, **params)
 
     return z_cr, z_ca
-
 
 
 @partial(
@@ -1686,9 +1675,6 @@ def images_point_source(
 
     return z, z_mask 
 
-@partial(
-    jit, static_argnames=("nlenses", "roots_itmax", "roots_compensated")
-)
 def _images_point_source_sequential(
     w,  
     nlenses=2,

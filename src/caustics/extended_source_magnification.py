@@ -33,7 +33,6 @@ from .point_source_magnification import (
 )
 
 
-@jit
 def _permute_images(z, z_mask, z_parity):
     """
     Sequantially permute the images corresponding to points on the source limb
@@ -220,7 +219,6 @@ def _split_segment(segment, n_parts=5):
 
 
 
-@partial(jit, static_argnames=("nr_of_segments"))
 def _process_segments(segments, nr_of_segments=20):
     """
     Process raw contour segments such that each segment is contiguous (meaning
@@ -252,7 +250,6 @@ def _process_segments(segments, nr_of_segments=20):
     return segments
 
 
-@partial(jit, static_argnames=("nlenses"))
 def _get_segments(z, z_mask, z_parity, nlenses=2):
     """
     Given the raw images corresponding to a sequence of points on the source
@@ -314,13 +311,11 @@ def _get_segments(z, z_mask, z_parity, nlenses=2):
     return segments_closed, segments_open, all_closed
 
 
-@jit
 def _concatenate_segments(segment_first, segment_second):
     segment_first_length = first_zero(jnp.abs(segment_first[0]))
     return segment_first + jnp.roll(segment_second, segment_first_length, axis=-1)
 
 
-@jit
 def _get_segment_length(segment, tail_idx):
     """Get the physical length of a segment."""
     diff = jnp.diff(segment[0])
@@ -328,7 +323,6 @@ def _get_segment_length(segment, tail_idx):
     return jnp.abs(diff).sum()
 
 
-@partial(jit, static_argnames=("min_dist", "max_dist"))
 def _connection_condition(
     seg1, seg2, tidx1, tidx2, ctype, min_dist=1e-05, max_dist=1e-01, max_ang=60.0
 ):
@@ -450,7 +444,6 @@ def _connection_condition(
     return cond_parity & cond_geom
 
 
-@jit
 def _merge_two_segments(seg1, seg2, tidx1, tidx2, ctype):
     """
     Merge two segments into one assuming that the length of the merged
@@ -501,10 +494,6 @@ def _merge_two_segments(seg1, seg2, tidx1, tidx2, ctype):
     return seg_merged, tidx_merged
 
 
-@partial(
-    jit,
-    static_argnames=("max_nr_of_contours", "max_nr_of_segments_in_contour"),
-)
 def _merge_open_segments(
     segments,
     max_nr_of_contours=3,
@@ -680,7 +669,6 @@ def _merge_open_segments(
     return jnp.stack(segments_merged_list)
 
 
-@jit
 def _contours_from_closed_segments(segments):
     """
     Process closed segments by extracting the parity information and adding a
@@ -698,10 +686,6 @@ def _contours_from_closed_segments(segments):
     return contours, contours_p
 
 
-@partial(
-    jit,
-    static_argnames=("max_nr_of_contours", "max_nr_of_segments_in_contour"),
-)
 def _contours_from_open_segments(
     segments,
     max_nr_of_contours=3,

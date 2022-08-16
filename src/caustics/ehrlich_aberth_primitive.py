@@ -7,7 +7,7 @@ from functools import partial
 import numpy as np
 from jax import numpy as jnp
 from jax.lib import xla_client
-from jax import core, dtypes, lax, jit, vmap
+from jax import core, dtypes, lax, vmap
 from jax.interpreters import ad, batching, xla
 from jax.abstract_arrays import ShapedArray
 import jax.numpy as jnp
@@ -31,7 +31,6 @@ xops = xla_client.ops
 
 # This function is just a wrapper around ehrlich_aberth to make it easier to
 # handle arrays with different shapes
-@partial(jit, static_argnames=("itmax", "compensated", "custom_init"))
 def poly_roots(
     coeffs, itmax=2000, compensated=False, custom_init=False, roots_init=None
 ):
@@ -96,7 +95,6 @@ def poly_roots(
 
 
 # This function exposes the primitive to user code
-@partial(jit, static_argnames=("itmax", "compensated", "custom_init"))
 def ehrlich_aberth(coeffs, roots_init, itmax=None, compensated=None, custom_init=False):
     roots = _ehrlich_aberth_prim.bind(
         coeffs,
@@ -253,7 +251,6 @@ def _ehrlich_aberth_translation(
 # applied, the jvp-transformed function executes a “JVP rule” for that primitive
 # that both evaluates the primitive on the primals and applies the primitive’s
 # JVP at those primal values.
-@partial(jit, static_argnames=("itmax", "compensated", "custom_init"))
 def _ehrlich_aberth_jvp(
     args, tangents, itmax=None, compensated=False, custom_init=False
 ):

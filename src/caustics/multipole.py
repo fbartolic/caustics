@@ -8,16 +8,11 @@ __all__ = [
 
 from functools import partial
 
-import numpy as np
 import jax.numpy as jnp
-import jax
-from jax import jit, vmap, checkpoint
+from jax import jit, vmap
 from jax.scipy.special import gammaln
 
-
-@checkpoint
-@jit
-def _mag_hexadecapole_cassan(W, images_mask, rho, u1=0.0):
+def _mag_hexadecapole_cassan(W, rho, u1=0.0):
     """
     Adapted from
     https://github.com/ArnaudCassan/microlensing/blob/master/microlensing/multipoles/multipoles.py
@@ -183,11 +178,11 @@ def _mag_hexadecapole_cassan(W, images_mask, rho, u1=0.0):
     a14 = akl(mu0, Q14)
     a05 = akl(mu0, Q05)
 
-    # Compute hexadecapole and quadrupolar mu and A
+    # Compute hexadecapole and quadrupole mu and A
     mu2 = (
         1.0
         / 4.0
-        * np.imag(
+        * jnp.imag(
             a01 * jnp.conjugate(a12 + a30)
             + jnp.conjugate(a10) * (a03 + a21)
             + 2.0 * a02 * jnp.conjugate(a11)
@@ -197,7 +192,7 @@ def _mag_hexadecapole_cassan(W, images_mask, rho, u1=0.0):
     mu4 = (
         1.0
         / 8.0
-        * np.imag(
+        * jnp.imag(
             (a05 + 2.0 * a23 + a41) * jnp.conjugate(a10)
             + 4.0 * a04 * jnp.conjugate(a11)
             + 4 * (a13 + a31) * jnp.conjugate(a20)
@@ -210,22 +205,14 @@ def _mag_hexadecapole_cassan(W, images_mask, rho, u1=0.0):
         )
     )
 
-    mu_ps = jnp.sum(images_mask * jnp.abs(mu0), axis=0)
-    mu_quad = jnp.sum(
-        images_mask * jnp.abs(1.0 / 2.0 * mu2 * (1.0 - 1.0 / 5.0 * Gamma) * rho**2),
-        axis=0,
-    )
-    mu_hex = jnp.sum(
-        images_mask
-        * jnp.abs(1.0 / 24.0 * mu4 * (1.0 - 11.0 / 35.0 * Gamma) * rho**4),
-        axis=0,
-    )
-
-    return mu_ps, mu_quad, mu_hex
+    mu_ps = mu0
+    delta_mu_quad = 1.0 / 2.0 * mu2 * (1.0 - 1.0 / 5.0 * Gamma) * rho**2
+    delta_mu_hex = 1.0 / 24.0 * mu4 * (1.0 - 11.0 / 35.0 * Gamma) * rho**4
+    
+    return mu_ps, delta_mu_quad, delta_mu_hex
 
 
-@partial(jit, static_argnames=("nlenses"))
-def _mag_hexadecapole(z, z_mask, rho, u1=0.0, nlenses=2, **params):
+def mag_hexadecapole(z, z_mask, rho, u1=0.0, nlenses=2, **params):
     # Wk from Cassan et. al. 2017
     factorial = lambda n: jnp.exp(gammaln(n + 1))
 
@@ -250,12 +237,15 @@ def _mag_hexadecapole(z, z_mask, rho, u1=0.0, nlenses=2, **params):
 
     Ws = vmap(W)(jnp.arange(2, 7))
 
-    return _mag_hexadecapole_cassan(Ws, z_mask, rho, u1=u1)
+    # Multipole terms per image, signed
+    mu_ps, delta_mu_quad, delta_mu_hex = _mag_hexadecapole_cassan(Ws, rho, u1=u1)
 
+    # Sum over images
+    mu_multi = jnp.sum(z_mask*(jnp.abs(mu_ps + delta_mu_quad + delta_mu_hex)), axis=0)
 
-def mag_hexadecapole(z, z_mask, rho, u1=0.0, nlenses=2, **params):
-    return jax.checkpoint(  # use checkpoint to save memory in reverse pass
-        lambda z, z_mask, rho, u1, **params: _mag_hexadecapole(
-            z, z_mask, rho, u1=u1, **params, nlenses=nlenses
-        )
-    )(z, z_mask, rho, u1=u1, **params)
+    # Get magnitude of the quadropole and hexadecapole terms in units of point
+    # source magnification
+    mu_quad_abs = jnp.sum(z_mask*(jnp.abs(delta_mu_quad)), axis=0) 
+    mu_hex_abs = jnp.sum(z_mask*(jnp.abs(delta_mu_hex)), axis=0) 
+
+    return mu_multi, mu_quad_abs + mu_hex_abs

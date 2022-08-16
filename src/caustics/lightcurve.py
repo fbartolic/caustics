@@ -9,9 +9,8 @@ __all__ = [
 
 from functools import partial
 
-import numpy as np
 import jax.numpy as jnp
-from jax import jit, vmap, lax, checkpoint
+from jax import jit, lax 
 
 from . import (
     images_point_source,
@@ -25,36 +24,11 @@ from caustics.multipole import (
 from .utils import *
 
 
-@partial(jit, static_argnames=("nlenses"))
-def _extended_source_test(
-    z,
-    mask_z,
-    w,
-    rho,
-    u1=0.0,
-    c_hex=5e-03,
-    c_ghost=0.9,
-    c_cusp=1e-03,
-    nlenses=2,
-    **params
+def _multipole_cusp_and_ghost_tests(
+    w, z, z_mask, rho, delta_mu_multi, nlenses=2, c_c=4e-03, c_g=7, rho_min=1e-03, delta=1e-04, **params
 ):
-    """
-    Test weather hexadecapole approximation is sufficient.
-    """
-    # For a single lens, use the full calculation if source center is
-    # at least two source radii away from the central caustic
-    mu_ps, mu_quad, mu_hex = mag_hexadecapole(
-        z, mask_z, rho, u1=u1, nlenses=nlenses, **params
-    )
-    mu_multi = mu_ps + mu_quad + mu_hex
-
-    if nlenses == 1:
-        mask_valid = w.real**2 + w.imag**2 > 4.0 * rho**2
-        return mask_valid, mu_multi
-
-    elif nlenses == 2:
+    if nlenses == 2:
         a, e1 = params["a"], params["e1"]
-
         # Derivatives
         f = lambda z: -e1 / (z - a) - (1 - e1) / (z + a)
         f_p = lambda z: e1 / (z - a) ** 2 + (1 - e1) / (z + a) ** 2
@@ -62,7 +36,6 @@ def _extended_source_test(
 
     elif nlenses == 3:
         a, r3, e1, e2 = params["a"], params["r3"], params["e1"], params["e2"]
-
         # Derivatives
         f = lambda z: -e1 / (z - a) - e2 / (z + a) - (1 - e1 - e2) / (z + r3)
         f_p = (
@@ -74,56 +47,44 @@ def _extended_source_test(
             lambda z: 2 * (e1 / (a - z) ** 3 - e2 / (a + z) ** 3)
             + (1 - e1 - e2) / (z + r3) ** 3
         )
-
-    else:
-        raise ValueError("`nlenses` has to be set to be <= 3.")
-
     zbar = jnp.conjugate(z)
     zhat = jnp.conjugate(w) - f(z)
 
     # Derivatives
     fp_z = f_p(z)
     fpp_z = f_pp(z)
-
     fp_zbar = f_p(zbar)
-    fpp_zbar = f_pp(zbar)
-
     fp_zhat = f_p(zhat)
-
-    fp_zhat_bar = jnp.conjugate(fp_zhat)
-
+    fpp_zbar = f_pp(zbar)
     J = 1.0 - jnp.abs(fp_z * fp_zbar)
 
-    mask_inside = jnp.prod(mask_z, axis=0)  # True if there are no false images
+    # Multipole test and cusp test
+    mask_inside = jnp.prod(z_mask, axis=0)  # True if there are no false images
+    mu_cusp = 6 * jnp.imag(3 * fp_zbar**3.0 * fpp_z**2.0) / J**5 * (rho + rho_min)**2
+    mu_cusp = jnp.sum(jnp.abs(mu_cusp) * z_mask, axis=0)
+    mu_cusp = jnp.where(mask_inside, jnp.zeros_like(mu_cusp), mu_cusp)
 
-    # Hexadecapole and cusp test
-    hex_test = ((jnp.abs(mu_hex) + jnp.abs(mu_quad)) / mu_ps) < c_hex
+    multipole_and_cusp_test = c_c*(mu_cusp + delta_mu_multi) < delta 
 
-    mu_cusp = 6 * jnp.imag(3 * fp_zbar**3.0 * fpp_z**2.0) / J**5 * rho**2
-    mu_cusp = jnp.sum(jnp.abs(mu_cusp) * mask_z, axis=0)
-    cusp_test = jnp.logical_or(mu_cusp / mu_ps < c_cusp, mask_inside)
-
-    # Ghost images test
-    pJ_pz = 1 - jnp.abs(fpp_z * fp_zbar)
-    pJ_pzbar = 1 - jnp.abs(fp_z * fpp_zbar)
-
-    # Compute theta for which J is maximized
-    phi_max = np.pi - 0.5 * 1j * jnp.log(
-        pJ_pzbar / (1 - fp_zhat_bar * fp_zbar) / (pJ_pz / (1 - fp_zhat * fp_z))
+    # False images test
+    Jhat = 1 - fp_z*fp_zhat
+    factor = jnp.abs(
+        J*Jhat**2/(Jhat*fpp_zbar*fp_z - jnp.conjugate(Jhat)*fpp_z*fp_zbar*fp_zhat)
     )
-    phi_max = jnp.real(phi_max)
+    test_ghost = 0.5*(~z_mask*factor).sum(axis=0) > c_g*(rho + rho_min)
+    test_ghost = jnp.logical_or(test_ghost, mask_inside)
 
-    # Evaluate delta_J at phi_max
-    delta_J_max = pJ_pz * rho * jnp.exp(1j * phi_max) / (
-        1 - fp_zhat * fp_z
-    ) + pJ_pzbar * rho * jnp.exp(-1j * phi_max) / (1 - fp_zhat_bar * fp_zbar)
+    return test_ghost & multipole_and_cusp_test
 
-    ghost_test = jnp.abs((~mask_z * (J + delta_J_max)).sum(axis=0)) > c_ghost
-    ghost_test = jnp.logical_or(ghost_test, mask_inside)
 
-    mask_valid = hex_test & cusp_test & ghost_test
-
-    return mask_valid, mu_multi
+def _planetary_caustic_test(w, rho, c_p=2., **params):
+    e1, a = params["e1"], params["a"]
+    s = 2*a
+    q = e1/(1-e1)
+    x_cm = (2*e1 - 1)*a
+    w_pc = -1/s - x_cm
+    delta_pc = 3*jnp.sqrt(q)/s
+    return (w_pc - w).real**2 + (w_pc - w).imag**2 > c_p*(rho**2 + delta_pc**2)
 
 
 @partial(
@@ -199,7 +160,7 @@ def mag(
         array_like: Magnification array.
     """
     # Compute point images for a point source
-    z, mask_z = images_point_source(
+    z, z_mask = images_point_source(
         w_points,
         nlenses=nlenses,
         roots_itmax=roots_itmax,
@@ -209,10 +170,28 @@ def mag(
 
     # Compute hexadecapole approximation at every point and a test where it is
     # sufficient
-    mask_test, mu_approx = _extended_source_test(
-        z, mask_z, w_points, rho, nlenses=nlenses, u1=u1, **params
+    mu_multi, delta_mu_multi = mag_hexadecapole(z, z_mask, rho, nlenses=nlenses, **params)
+    test = _multipole_cusp_and_ghost_tests(
+        w_points, z, z_mask, rho, delta_mu_multi, 
+        c_c=4e-03, c_g=7, rho_min=1e-03, nlenses=nlenses,  **params
     )
 
+    if nlenses == 2:
+        e1 = params['e1']
+        q = e1/(1-e1)
+        test = lax.cond(
+            q < 0.01, 
+            lambda:test & _planetary_caustic_test(w_points, rho, **params),
+            lambda:test,
+        )
+
+    # Trigger the full calculation everywhere because I haven't figured out 
+    # how to implement the ghost image test for nlenses > 2 yet
+    elif nlenses == 3:
+        test = jnp.zeros_like(w_points).astype(jnp.bool_)
+    else:
+        raise ValueError("nlenses must be <= 3")
+    
     mag_full = lambda w: mag_extended_source(
         w,
         rho,
@@ -223,6 +202,7 @@ def mag(
         npts_ld=npts_ld,
         roots_itmax=roots_itmax,
         roots_compensated=roots_compensated,
+        **params,
     )
 
     # Iterate over w_points and execute either the hexadecapole  approximation
@@ -235,6 +215,6 @@ def mag(
             mag_full,
             xs[2],
         ),
-        [mask_test, mu_approx, w_points],
+        [test, mu_multi, w_points],
         #        jnp.stack([mask_test, mu_approx,  w_points]).T,
     )

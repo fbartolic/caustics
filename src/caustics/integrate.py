@@ -15,22 +15,17 @@ from .point_source_magnification import lens_eq
 from .utils import trapz_zero_avoiding
 
 
-@partial(jit, static_argnums=(0,), static_argnames=("n"))
 def _integrate_gauss_legendre(f, a, b, n=100):
     pts, weights = np.polynomial.legendre.leggauss(n)
     pts_rescaled = 0.5 * (b - a) * pts[:, None] + 0.5 * (b + a)
     return jnp.sum(0.5 * (b - a) * f(pts_rescaled) * weights[:, None], axis=0)
 
-
-@jit
 def _integrate_unif(z, tidx):
     # Trapezoidal rule
     I1 = trapz_zero_avoiding(0.5 * z.real, z.imag, tidx)
     I2 = trapz_zero_avoiding(-0.5 * z.imag, z.real, tidx)
     return I1 + I2
 
-
-@partial(jit, static_argnames=("nlenses"))
 def _brightness_profile(z, rho, w0, u1=0.0, nlenses=2, **params):
     w = lens_eq(z, nlenses=nlenses, **params)
     r = jnp.abs(w - w0) / rho
