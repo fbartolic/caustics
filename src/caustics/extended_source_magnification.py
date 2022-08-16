@@ -53,7 +53,7 @@ def _permute_images(z, z_mask, z_parity):
     _, xs = lax.scan(apply_match_points, init, jnp.moveaxis(xs, -1, 0))
     z, z_mask, z_parity = jnp.moveaxis(xs, 1, 0)
 
-    return z.T, z_mask.real.astype(jnp.bool_).T, z_parity.T
+    return z.T, z_mask.real.astype(bool).T, z_parity.T
 
 
 @partial(
@@ -156,50 +156,53 @@ def _images_of_source_limb(
     return z, z_mask, z_parity
 
 
-@partial(jit, static_argnames=("n_parts"))
-def _split_single_segment(segment, n_parts=5):
+def _split_segment(segment, n_parts=5):
     """
     Split a single contour segment with shape `(2, npts)` which has at most
     `n_parts` parts seperated by zeros, split it into `n_parts` segments
     such that each segment is contiguous.
     """
-    npts = segment.shape[1]
+    z, z_parity, z_mask = segment
+    npts = len(z)
 
-    # adapted from https://stackoverflow.com/questions/43385877/efficient-numpy-subarrays-extraction-from-a-mask
-    def separate_regions(m):
-        m0 = jnp.concatenate([jnp.array([False]), m, jnp.array([False])])
-        idcs = jnp.flatnonzero(m0[1:] != m0[:-1], size=2 * n_parts)
-        return idcs[::2], idcs[1::2]
+    # Construct a mask which evaluates to True at index `i` if the false image
+    # mask changes from `i` to `i+1`, if the parity changes or if the distance
+    # between the two images is greater than 0.1
+    z_diff = z[1:] - z[:-1]
+    diff_dist_mask = z_diff.real**2 + z_diff.imag**2 > 0.1**2
+    diff_parity = z_parity[1:].real - z_parity[:-1].real
+    diff_mask = z_mask[1:].real - z_mask[:-1].real
+    changepoints = (diff_dist_mask != False) | (diff_parity != 0) | (diff_mask != False)
 
-    # First, construct a mask indicating all the real images (False images have 
-    # been zeroed out previously)
-    mask_split = jnp.abs(segment[0].real) > 0.0
+    # Expand to sort out the first and the last points
+    changepoints = jnp.concatenate([
+        jnp.array([jnp.where(z_mask[0] == 0, False, True)]),
+        changepoints,
+        jnp.array([jnp.where(z_mask[-1] == 0, False, True)]),
+    ])
+    diff_mask = jnp.concatenate([
+        jnp.array([jnp.where(z_mask[0] == 0, 0., 1.)]),
+        diff_mask,
+        jnp.array([jnp.where(z_mask[-1] == 0, 0., -1.)]),
+    ])
 
-    # Second, in rare cases the point source image matching algorithm fails
-    # to connect images properly and there will be a continous set of real
-    # points source images not belonging to the same contour. To avoid this error
-    # we check if there are sudden jumps in the segment between consecutive 
-    # real images and we insert a zero at one of the points
-    z, z_mask = segment
-    z_mask = z_mask.astype(jnp.bool_)
-
-    z_n = z[:-1]
-    z_np1 = z[1:]
-    z_mask_n = z_mask[:-1]
-    z_mask_np1 = z_mask[1:]
-
-    z_diff = jnp.abs(z_np1 - z_n)
-    mask_jump = z_diff < 0.1
-    mask_split = jnp.where(
-        ~mask_jump & z_mask_n & z_mask_np1,
-        mask_jump,
-        mask_split[:-1] 
+    # Find the indices of the starting and ending points of intervals which 
+    # contain real images with the same parity
+    idcs_start = jnp.where(
+        changepoints & (diff_mask >= 0),
+        changepoints,
+        jnp.zeros_like(changepoints)
     )
-    mask_split = jnp.concatenate([mask_split, jnp.atleast_1d(z_mask[-1])])
+    idcs_end = jnp.where(
+        changepoints & (diff_mask <= 0),
+        changepoints,
+        jnp.zeros_like(changepoints)
+    )
+
+    idcs_start = jnp.argwhere(idcs_start, size=2*n_parts)[:, 0]
+    idcs_end = jnp.argwhere(idcs_end, size=2*n_parts)[:, 0]
 
     # Split into n_parts parts
-    idcs_start, idcs_end = separate_regions(mask_split)
-
     n = jnp.arange(npts)
 
     def mask_region(carry, xs):
@@ -216,6 +219,7 @@ def _split_single_segment(segment, n_parts=5):
     return segments_split
 
 
+
 @partial(jit, static_argnames=("nr_of_segments"))
 def _process_segments(segments, nr_of_segments=20):
     """
@@ -226,10 +230,10 @@ def _process_segments(segments, nr_of_segments=20):
     equal to `nr_of_segments`. Segments with fewer than 3 points are removed.
     """
     # Split segments
-    segments = jnp.concatenate(vmap(_split_single_segment)(segments))
+    segments = jnp.concatenate(vmap(_split_segment)(segments))
 
-    # If a segment consists of less than 3 points, set it to zero
-    mask = jnp.sum((segments[:, 0] != 0 + 0j).astype(jnp.int64), axis=1) < 3
+    # If a segment consists of just 1 point, set it to zero 
+    mask = jnp.sum((segments[:, 0] != 0 + 0j).astype(int), axis=1) < 2
     segments = segments * (~mask[:, None, None])
 
     # Sort segments such that the nonempty segments appear first and shrink array
@@ -283,7 +287,7 @@ def _get_segments(z, z_mask, z_parity, nlenses=2):
     # Apply mask and bundle the images and parity into a single array
     z = z * z_mask
     z_parity = z_parity * z_mask
-    segments = jnp.stack([z, z_parity])
+    segments = jnp.stack([z, z_parity, z_mask])
     segments = jnp.moveaxis(segments, 0, 1)
 
     # Split segments into segments which are already closed contours (they don't
@@ -303,6 +307,9 @@ def _get_segments(z, z_mask, z_parity, nlenses=2):
         lambda s: _process_segments(s, nr_of_segments=nr_of_segments),
         segments_open,
     )
+
+    segments_closed = segments_closed[:, :2, :]
+    segments_open = segments_open[:, :2, :]
 
     return segments_closed, segments_open, all_closed
 
@@ -371,12 +378,11 @@ def _connection_condition(
         bool: True if the two segments should be connected with a `ctype`
             connection.
     """
-
-    def get_segment_head(seg):
+    def get_segment_head(seg, t):
         # Sometimes two points at end or beginning are nearly identical, need to
         # avoid those situations by picking the next point
         x = seg[0]
-        cond = jnp.abs(x[1] - x[0]) > 1e-5
+        cond = (jnp.abs(x[1] - x[0]) > 1e-5) | (t <= 1)
         line = lax.cond(
             cond,
             lambda: x[:2],
@@ -386,7 +392,7 @@ def _connection_condition(
 
     def get_segment_tail(seg, t):
         x = seg[0]
-        cond = jnp.abs(x[t] - x[t - 1]) > 1e-5
+        cond = (jnp.abs(x[t] - x[t - 1]) > 1e-5) | (t <= 1)
         line = lax.cond(
             cond,
             lambda: lax.dynamic_slice(x, (t - 1,), (2,)),
@@ -410,9 +416,9 @@ def _connection_condition(
     line1, line2 = lax.switch(
         ctype,
         [
-            lambda s1, s2, t1, t2: (get_segment_tail(s1, t1), get_segment_head(s2)),
-            lambda s1, s2, t1, t2: (get_segment_head(s1), get_segment_tail(s2, t2)),
-            lambda s1, s2, t1, t2: (get_segment_head(s1), get_segment_head(s2)),
+            lambda s1, s2, t1, t2: (get_segment_tail(s1, t1), get_segment_head(s2, t2)),
+            lambda s1, s2, t1, t2: (get_segment_head(s1, t1), get_segment_tail(s2, t2)),
+            lambda s1, s2, t1, t2: (get_segment_head(s1, t1), get_segment_head(s2, t2)),
             lambda s1, s2, t1, t2: (
                 get_segment_tail(s1, tidx1),
                 get_segment_tail(s2, t2),
@@ -564,6 +570,9 @@ def _merge_open_segments(
         ctype3, idx3 = jnp.unravel_index(
             jnp.argsort(distances.reshape(-1))[2], distances.shape
         )
+        ctype4, idx4 = jnp.unravel_index(
+            jnp.argsort(distances.reshape(-1))[3], distances.shape
+        )
 
         # Evaluate the connection conditions for each of the four closest segments
         success1 = _connection_condition(
@@ -575,19 +584,22 @@ def _merge_open_segments(
         success3 = _connection_condition(
             seg_active, segments[idx3], tidx_active, tidcs[idx3], ctype3
         )
+        success4 = _connection_condition(
+            seg_active, segments[idx4], tidx_active, tidcs[idx4], ctype4
+        )
 
         def branch1(segments, tidcs):
             # Select the closest segment that satisfies the connection condition
             idx_best = first_nonzero(
-                jnp.array([success1, success2, success3]).astype(jnp.float64)
+                jnp.array([success1, success2, success3, success4]).astype(float)
             )
             seg_best = jnp.stack(
-                [segments[idx1], segments[idx2], segments[idx3]]
+                [segments[idx1], segments[idx2], segments[idx3], segments[idx4]]
             )[idx_best]
-            tidx_best = jnp.stack([tidcs[idx1], tidcs[idx2], tidcs[idx3]])[
+            tidx_best = jnp.stack([tidcs[idx1], tidcs[idx2], tidcs[idx3], tidcs[idx4]])[
                 idx_best
             ]
-            ctype = jnp.stack([ctype1, ctype2, ctype3])[idx_best]
+            ctype = jnp.stack([ctype1, ctype2, ctype3, ctype4])[idx_best]
 
             # Merge that segment with the active segment
             seg_active_new, tidx_active_new = _merge_two_segments(
@@ -599,7 +611,7 @@ def _merge_open_segments(
             )
 
             # Zero-out the segment that was merged
-            idx_seg = jnp.array([idx1, idx2, idx3])[idx_best]
+            idx_seg = jnp.array([idx1, idx2, idx3, idx4])[idx_best]
             segments = segments.at[idx_seg].set(
                 jnp.zeros_like(segments[0]), segments[idx1]
             )
@@ -609,7 +621,7 @@ def _merge_open_segments(
             return seg_active, tidx_active, segments, tidcs
 
         return lax.cond(
-            jnp.any(jnp.array([success1, success2, success3])),
+            jnp.any(jnp.array([success1, success2, success3, success4])),
             branch1,
             branch2,
             segments,tidcs
