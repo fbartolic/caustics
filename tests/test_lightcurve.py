@@ -13,7 +13,7 @@ from caustics import (
     images_point_source,
 )
 from caustics.multipole import mag_hexadecapole
-from caustics.lightcurve import _multipole_cusp_and_ghost_tests, _planetary_caustic_test
+from caustics.lightcurve import _multipole_and_false_image_test, _planetary_caustic_test
 
 config.update("jax_platform_name", "cpu")
 config.update("jax_enable_x64", True)
@@ -59,7 +59,7 @@ def test_finite_source_switch(niter=15, rtol=5e-04):
         mu_multi, delta_multi = mag_hexadecapole(z, z_mask, rho, nlenses=2, a=a,e1=e1)
         err_hex = jnp.abs(mu_multi - mags)/mags
 
-        test = _multipole_cusp_and_ghost_tests(
+        test = _multipole_and_false_image_test(
             w_test, z, z_mask, rho, delta_multi, 
             nlenses=2,  a=a, e1=e1
         )
