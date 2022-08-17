@@ -10,7 +10,7 @@ from jax import lax, jacrev, jacfwd
 
 from caustics.extended_source_magnification import (
     _images_of_source_limb,
-    _split_single_segment,
+    _split_segment,
     _get_segments,
     _contours_from_open_segments,
     _connection_condition,
@@ -176,23 +176,26 @@ def test_mag_extended_source_single_ld(rho, u1=0.7, npts_limb=300, npts_ld=100, 
     np.testing.assert_allclose(mags, mags_lee, rtol=rtol)
 
 
-def test_split_single_segment():
-    x = jnp.array([0.0, 1.0, 1.01, 1.02, 0.0, 4.0, 4.01, 0.0, 0.0, 6.0]).astype(
+def test_split_segment():
+    z = jnp.array([0.0, 1.0, 1.01, 1.02, 1.03, 0.0, 4.0, 4.01, 0.0, 0.0, 6.0]).astype(
         jnp.complex128
     )
-    x = jnp.stack([x, x])
-    res = _split_single_segment(x, n_parts=5)[:, 0, :].real
+    z_parity = jnp.array([-1., -1., -1., 1., 1., 1., 1., 1., 1., 1., 1.])
+    z_mask = jnp.array([0., 1., 1., 1., 1., 0., 1., 1., 0., 0., 1.])
+    res = _split_segment(jnp.stack([z, z_parity, z_mask]), n_parts=5)[:, 0, :].real
 
     np.testing.assert_equal(
-        res[0], np.array([0.0, 1.0, 1.01, 1.02, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        res[0], np.array([0.0, 1.0, 1.01, 0., 0., 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
     )
     np.testing.assert_equal(
-        res[1], np.array([0.0, 0.0, 0.0, 0.0, 0.0, 4.0, 4.01, 0.0, 0.0, 0.0])
+        res[1], np.array([0.0, 0., 0., 1.02, 1.03, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
     )
     np.testing.assert_equal(
-        res[2], np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 6.0])
+        res[2], np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0., 4.0, 4.01, 0.0, 0.0, 0.0])
     )
-    np.testing.assert_equal(res[3], np.zeros_like(res.shape[0]))
+    np.testing.assert_equal(
+        res[3], np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0., 0.0, 0.0, 0.0, 0.0, 6.0])
+    )
     np.testing.assert_equal(res[4], np.zeros_like(res.shape[0]))
 
 

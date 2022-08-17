@@ -157,9 +157,9 @@ def _images_of_source_limb(
 
 def _split_segment(segment, n_parts=5):
     """
-    Split a single contour segment with shape `(2, npts)` which has at most
-    `n_parts` parts seperated by zeros, split it into `n_parts` segments
-    such that each segment is contiguous.
+    Split a single segment such that each part consists of only real images 
+    with the same parity such that there are no large jumps in distance between
+    consecutive images. `n_parts` specifies the maximum number of output parts.
     """
     z, z_parity, z_mask = segment
     npts = len(z)
@@ -255,7 +255,7 @@ def _get_segments(z, z_mask, z_parity, nlenses=2):
     Given the raw images corresponding to a sequence of points on the source
     limb, return two arrays with `open` and `closed` contour segments.
     Closed segments are those images which do not cross the critical curve
-    and do not require any extra processing. Open segments need to be stiched
+    and do not require any extra processing. Open segments need to be stitched 
     together to form closed contours.
 
     WARNING: The number of these open segments is variable and I assume that
