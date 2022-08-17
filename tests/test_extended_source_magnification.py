@@ -199,55 +199,11 @@ def test_split_segment():
     np.testing.assert_equal(res[4], np.zeros_like(res.shape[0]))
 
 
-
-@pytest.mark.parametrize("rho", [1., 1e-01, 1e-02, 1e-03, 1e-04])
-def test_get_segments(rho, npts_limb=200):
-    w_test, params = get_points_and_params_triple(rho)
-
-    def f(w):
-        z, z_mask, z_parity = _images_of_source_limb(
-            w,
-            rho,
-            nlenses=3,
-            npts=npts_limb,
-            **params,
-        )
-        segments_closed, segments_open, all_closed = _get_segments(
-            z, z_mask, z_parity, nlenses=3
-        )
-        return segments_open
-
-
-    def check_single_segment(segment):
-        z, p = segment
-
-        # Check that the parity of each nonzero point is the same
-        cond_parity = jnp.logical_xor((p == -1.0).sum() > 0, (p == 1).sum() > 0)
-
-        # Check that the segment is continous
-        mask = jnp.abs(z) > 0.0
-        cond_continuous = (jnp.abs(jnp.diff(mask)) > 0.0).sum() <= 1
-
-        return lax.cond(
-            jnp.logical_and(cond_parity, cond_continuous), lambda: 1.0, lambda: jnp.nan
-        )
-
-    def check_segments(segments):
-        f = lambda seg: lax.cond(
-            jnp.all(seg == 0 + 0j), lambda _: 1.0, check_single_segment, seg
-        )
-        return jnp.any(jnp.isnan(vmap(f)(segments)))
-
-
-    segments_list = jnp.array([f(w) for w in w_test])
-    assert jnp.all(
-        jnp.isnan(jnp.array([check_segments(seg) for seg in segments_list])) == False
-    )
-
 @pytest.mark.parametrize("rho", [1e-0, 1e-01, 1e-02, 1e-03, 1e-04])
 def test_get_contours(rho, npts_limb=200):
     w_test, params = get_points_and_params_triple(rho)
 
+    @jit
     def fn(w):
         z, z_mask, z_parity = _images_of_source_limb(
             w,
@@ -354,8 +310,8 @@ def test_grad_mag_extended_source_binary(
             a=a,
         )
 
-    grad_fn_fwd = jacfwd(fn)
-    grad_fn_rev = jacrev(fn)
+    grad_fn_fwd = jit(jacfwd(fn))
+    grad_fn_rev = jit(jacrev(fn))
 
     jac_fwd = grad_fn_fwd(jnp.array([a, e1, rho, u1]))
     jac_rev = grad_fn_rev(jnp.array([a, e1, rho, u1]))
