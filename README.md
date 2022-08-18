@@ -1,7 +1,14 @@
+<p align="center">
+  <img width = "500" src="docs/logo.svg"/>
+  <br>
+</p>
+
 # caustics
 [![tests](https://github.com/fbartolic/caustics/actions/workflows/tests.yml/badge.svg)](https://github.com/fbartolic/caustics/actions/workflows/tests.yml)
 
-`caustics` enables computation of microlensing light curves for binary and triple lens systems using the method of [contour integration](https://academic.oup.com/mnras/article-abstract/503/4/6143/6149166?redirectedFrom=fulltext&login=false). It is built on top of the [JAX](https://github.com/google/jax) library which enables efficient computation of *exact* gradients of the `caustics` outputs with respect to all input parameters through the use of [automatic differentiation](https://jax.readthedocs.io/en/latest/notebooks/autodiff_cookbook.html). 
+`caustics` is a code for computing microlensing light curves of single, binary, and triple lens systems using the contour integration 
+method. It is built using the [JAX](https://github.com/google/jax) library which enables the computation 
+of *exact* gradients of the code outputs with respect to all input parameters through the use of [automatic differentiation](https://jax.readthedocs.io/en/latest/notebooks/autodiff_cookbook.html). 
 
 ## Installation
 `caustics` is still being actively developed and is not yet released on PyPI. To install the development version, clone this repository, 
