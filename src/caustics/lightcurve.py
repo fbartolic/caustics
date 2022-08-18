@@ -24,8 +24,9 @@ from caustics.multipole import (
 from .utils import *
 
 
-def _multipole_and_false_image_test(
-    w, z, z_mask, rho, delta_mu_multi, nlenses=2, c_m=5e-03, c_g=7, rho_min=1e-03, delta=1e-04, **params
+@partial(jit, static_argnames=("nlenses"))
+def _caustics_proximity_test(
+    w, z, z_mask, rho, delta_mu_multi, nlenses=2, c_m=1e-02, gamma=0.02, c_f=4., rho_min=1e-03, **params
 ):
     if nlenses == 2:
         a, e1 = params["a"], params["e1"]
@@ -58,19 +59,24 @@ def _multipole_and_false_image_test(
     fpp_zbar = f_pp(zbar)
     J = 1.0 - jnp.abs(fp_z * fp_zbar)
 
-    # Multipole test 
-    multipole_test = c_m*(delta_mu_multi) < delta 
+    # Multipole test and cusp test
+    mu_cusp = 6 * jnp.imag(3 * fp_zbar**3.0 * fpp_z**2.0) / J**5 * (rho + rho_min)**2
+    mu_cusp = jnp.sum(jnp.abs(mu_cusp) * z_mask, axis=0)
+    test_multipole_and_cusp = gamma*mu_cusp + delta_mu_multi < c_m
 
     # False images test
-    mask_inside = jnp.prod(z_mask, axis=0)  # True if there are no false images
-    Jhat = 1 - fp_z*fp_zhat
+    Jhat = 1 - jnp.abs(fp_z*fp_zhat)
     factor = jnp.abs(
         J*Jhat**2/(Jhat*fpp_zbar*fp_z - jnp.conjugate(Jhat)*fpp_z*fp_zbar*fp_zhat)
     )
-    test_ghost = 0.5*(~z_mask*factor).sum(axis=0) > c_g*(rho + rho_min)
-    test_ghost = jnp.logical_or(test_ghost, mask_inside)
+    test_false_images = 0.5*(~z_mask*factor).sum(axis=0) > c_f*(rho + rho_min)
+    test_false_images = jnp.where(
+        (~z_mask).sum(axis=0)==0, 
+        jnp.ones_like(test_false_images, dtype=jnp.bool_), 
+        test_false_images
+    )
 
-    return test_ghost & multipole_test
+    return test_false_images & test_multipole_and_cusp
 
 
 def _planetary_caustic_test(w, rho, c_p=2., **params):
@@ -167,9 +173,8 @@ def mag(
     # Compute hexadecapole approximation at every point and a test where it is
     # sufficient
     mu_multi, delta_mu_multi = mag_hexadecapole(z, z_mask, rho, nlenses=nlenses, **params)
-    test = _multipole_and_false_image_test(
-        w_points, z, z_mask, rho, delta_mu_multi, 
-        c_c=4e-03, c_g=7, rho_min=1e-03, nlenses=nlenses,  **params
+    test = _caustics_proximity_test(
+        w_points, z, z_mask, rho, delta_mu_multi, nlenses=nlenses,  **params
     )
 
     if nlenses == 2:
