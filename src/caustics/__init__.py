@@ -2,7 +2,6 @@
 __all__ = [
     "__version__",
     "lens_eq",
-    "images_point_source",
     "mag_point_source",
     "critical_and_caustic_curves",
     "mag_extended_source",
@@ -11,7 +10,6 @@ __all__ = [
 
 from .point_source_magnification import (
     lens_eq,
-    images_point_source,
     mag_point_source,
     critical_and_caustic_curves,
 )

@@ -24,7 +24,7 @@ from .utils import (
     sparse_argsort,
 )
 
-from .point_source_magnification import (
+from .point_source import (
     lens_eq_det_jac,
     _images_point_source,
     _images_point_source_sequential,

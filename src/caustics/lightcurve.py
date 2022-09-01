@@ -13,7 +13,7 @@ import jax.numpy as jnp
 from jax import jit, lax 
 
 from . import mag_extended_source
-from .point_source_magnification import _images_point_source
+from .point_source import _images_point_source
 
 from caustics.multipole import _mag_hexadecapole
 

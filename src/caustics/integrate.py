@@ -11,7 +11,7 @@ from jax import jit
 
 from .utils import *
 
-from .point_source_magnification import lens_eq
+from .point_source import lens_eq
 from .utils import trapz_zero_avoiding
 
 
