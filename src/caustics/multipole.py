@@ -1,15 +1,8 @@
 """
 Hexadecapole approximation for the extended source magnification. 
 """
-__all__ = [
-    "mag_hexadecapole",
-]
-
-
-from functools import partial
-
 import jax.numpy as jnp
-from jax import jit, vmap
+from jax import vmap
 from jax.scipy.special import gammaln
 
 def _mag_hexadecapole_cassan(W, rho, u1=0.0):
@@ -212,7 +205,7 @@ def _mag_hexadecapole_cassan(W, rho, u1=0.0):
     return mu_ps, delta_mu_quad, delta_mu_hex
 
 
-def mag_hexadecapole(z, z_mask, rho, u1=0.0, nlenses=2, **params):
+def _mag_hexadecapole(z, z_mask, rho, u1=0.0, nlenses=2, **params):
     # Wk from Cassan et. al. 2017
     factorial = lambda n: jnp.exp(gammaln(n + 1))
 
@@ -243,7 +236,7 @@ def mag_hexadecapole(z, z_mask, rho, u1=0.0, nlenses=2, **params):
     # Sum over images
     mu_multi = jnp.sum(z_mask*(jnp.abs(mu_ps + delta_mu_quad + delta_mu_hex)), axis=0)
 
-    # Get magnitude of the quadropole and hexadecapole terms in units of point
+    # Get magnitude of the quadrupole and hexadecapole terms in units of point
     # source magnification
     mu_quad_abs = jnp.sum(z_mask*(jnp.abs(delta_mu_quad)), axis=0) 
     mu_hex_abs = jnp.sum(z_mask*(jnp.abs(delta_mu_hex)), axis=0) 

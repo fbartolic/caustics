@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-
 import numpy as np
 import pytest
 
@@ -13,12 +12,11 @@ from caustics import (
 
 import MulensModel as mm
 
-def mag_vbb_binary_ps(w0, a, e1):
-    e2 = 1 - e1
-    x_cm = (e1 - e2)*a
-    bl = mm.BinaryLens(e2, e1, 2*a)
-    return bl.point_source_magnification(w0.real - x_cm, w0.imag)
-
+def mag_vbb_binary_ps(w0, s, q):
+    e1 = 1/(1 + q)
+    e2 = q/(1 + q)
+    bl = mm.BinaryLens(e2, e1, s)
+    return bl.point_source_magnification(w0.real, w0.imag)
 
 config.update("jax_platform_name", "cpu")
 config.update("jax_enable_x64", True)
@@ -26,15 +24,13 @@ config.update("jax_enable_x64", True)
 
 @pytest.fixture()
 def get_data():
-    a = 0.5 * 0.9
-    e1 = 0.8
-    e2 = 1.0 - e1
-
-    return a, e1
+    s = 0.9
+    q = 0.2
+    return s, q
 
 
 def test_mag_point_source_binary(get_data):
-    a, e1 = get_data
+    s, q = get_data
 
     width = 1.0
     npts = 50
@@ -43,19 +39,19 @@ def test_mag_point_source_binary(get_data):
     xgrid, ygrid = jnp.meshgrid(x, y)
     wgrid = xgrid + 1j * ygrid
 
-    mag = mag_point_source(wgrid, nlenses=2, a=a, e1=e1)
+    mag = mag_point_source(wgrid, nlenses=2, s=s, q=q)
 
     # Compare to VBBinaryLensing
     mag_vbb = np.zeros(wgrid.shape)
     for i in range(wgrid.shape[0]):
         for j in range(wgrid.shape[1]):
-            mag_vbb[i, j] = mag_vbb_binary_ps(wgrid[i, j], a, e1)
+            mag_vbb[i, j] = mag_vbb_binary_ps(wgrid[i, j], s, q)
     np.testing.assert_allclose(mag, mag_vbb, atol=1e-10)
 
 
 def test_mag_point_source_grad(get_data):
-    a, e1 = get_data
+    s, q = get_data
 
     # Check gradient of mag. with respect to lens separation
-    fn = lambda a: mag_point_source(jnp.array([0.0 + 0.1j])[0], nlenses=2, a=a, e1=e1)
-    check_grads(fn, (a,), 2)
+    fn = lambda s: mag_point_source(jnp.array([0.0 + 0.1j])[0], nlenses=2, s=s, q=q)
+    check_grads(fn, (s,), 2)

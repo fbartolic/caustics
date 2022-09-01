@@ -12,14 +12,10 @@ from functools import partial
 import jax.numpy as jnp
 from jax import jit, lax 
 
-from . import (
-    images_point_source,
-    mag_extended_source,
-)
+from . import mag_extended_source
+from .point_source_magnification import _images_point_source
 
-from caustics.multipole import (
-    mag_hexadecapole,
-)
+from caustics.multipole import _mag_hexadecapole
 
 from .utils import *
 
@@ -84,7 +80,7 @@ def _planetary_caustic_test(w, rho, c_p=2., **params):
     s = 2*a
     q = e1/(1-e1)
     x_cm = (2*e1 - 1)*a
-    w_pc = -1/s - x_cm
+    w_pc = -1/s 
     delta_pc = 3*jnp.sqrt(q)/s
     return (w_pc - w).real**2 + (w_pc - w).imag**2 > c_p*(rho**2 + delta_pc**2)
 
@@ -148,12 +144,12 @@ def mag(
         npts_ld (int, optional): Number of points at which the stellar brightness
             function is evaluated when computing the integrals P and Q from
             Dominik 1998. Defaults to 50.
-        **a (float): Half the separation between the first two lenses located on
-            the real line with $r_1 = a$ and $r_2 = -a$.
-        **r3 (float): The position of the third lens at arbitrary location in
-            the complex plane.
-        **e1 (array_like): Mass fraction of the first lens located at $r_1=a$.
-        **e2 (array_like): Mass fraction of the second lens located at $r_2=-a$.
+        **s (float): Separation between the two lenses. The first lens is located 
+            at -sq/(1 + q) and the second lens is at s/(1 + q) on the real line.
+        **q (float): Mass ratio defined as m2/m1.
+        **q3 (float): Mass ratio defined as m3/m1.
+        **r3 (float): Magnitude of the complex position of the third lens.
+        **psi (float): Phase angle of the complex position of the third lens.
         **roots_itmax (int, optional): Number of iterations for the root solver.
         **roots_compensated (bool, optional): Whether to use the compensated
             arithmetic version of the Ehrlich-Aberth root solver.
@@ -161,37 +157,57 @@ def mag(
     Returns:
         array_like: Magnification array.
     """
-    # Compute point images for a point source
-    z, z_mask = images_point_source(
-        w_points,
-        nlenses=nlenses,
-        roots_itmax=roots_itmax,
-        roots_compensated=roots_compensated,
-        **params
-    )
-
-    # Compute hexadecapole approximation at every point and a test where it is
-    # sufficient
-    mu_multi, delta_mu_multi = mag_hexadecapole(z, z_mask, rho, nlenses=nlenses, **params)
-    test = _caustics_proximity_test(
-        w_points, z, z_mask, rho, delta_mu_multi, nlenses=nlenses,  **params
-    )
-
-    if nlenses == 2:
-        e1 = params['e1']
-        q = e1/(1-e1)
-        test = lax.cond(
-            q < 0.01, 
-            lambda:test & _planetary_caustic_test(w_points, rho, **params),
-            lambda:test,
-        )
+    if nlenses == 1:
+        _params = {}
+    elif nlenses == 2:
+        s, q = params["s"], params["q"]
+        a = 0.5*s
+        e1 = 1/(1 + q)
+        _params = {"a": a, "e1": e1}
+        x_cm = a*(1 - q)/(1 + q)
 
     # Trigger the full calculation everywhere because I haven't figured out 
     # how to implement the ghost image test for nlenses > 2 yet
     elif nlenses == 3:
-        test = jnp.zeros_like(w_points).astype(jnp.bool_)
+        s, q, q3, r3, psi = params["s"], params["q"], params["q3"], params["r3"], params["psi"]
+        a = 0.5*s
+        e1 = q/(1 + q + q3)
+        e2 = q*e1
+        r3 = r3*jnp.exp(1j*psi)
+        _params = {"a": a, "r3": r3, "e1": e1, "e2": e2}
+        x_cm = a*(1 - q)/(1 + q)
+
     else:
         raise ValueError("nlenses must be <= 3")
+
+
+    # Compute point images for a point source
+    z, z_mask = _images_point_source(
+        w_points + x_cm,
+        nlenses=nlenses,
+        roots_itmax=roots_itmax,
+        roots_compensated=roots_compensated,
+        **_params
+    )
+
+    if nlenses==1:
+        test = w_points > 2*rho
+    elif nlenses==2:
+        # Compute hexadecapole approximation at every point and a test where it is
+        # sufficient
+        mu_multi, delta_mu_multi = _mag_hexadecapole(z, z_mask, rho, nlenses=nlenses, **_params)
+        test1 = _caustics_proximity_test(
+            w_points + x_cm, z, z_mask, rho, delta_mu_multi, nlenses=nlenses,  **_params
+        )
+        test2 = _planetary_caustic_test(w_points + x_cm, rho, **_params)
+
+        test = lax.cond(
+            q < 0.01, 
+            lambda:test1 & test2,
+            lambda:test1,
+        )
+    elif nlenses == 3:
+        test = jnp.zeros_like(w_points).astype(jnp.bool_)
     
     mag_full = lambda w: mag_extended_source(
         w,

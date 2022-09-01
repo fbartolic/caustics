@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 __all__ = [
-    "images_point_source",
     "mag_point_source",
     "critical_and_caustic_curves",
     "lens_eq",
@@ -1592,11 +1591,19 @@ def critical_and_caustic_curves(npts=200, nlenses=2, **params):
         return jnp.exp(-1j * phi), jnp.zeros(npts).astype(jnp.complex128)
 
     if nlenses == 2:
-        a, e1 = params["a"], params["e1"]
+        s, q = params["s"], params["q"]
+        a = 0.5*s
+        e1 = 1/(1 + q)
+        _params = {"a": a, "e1": e1}
         coeffs = jnp.moveaxis(_poly_coeffs_critical_binary(phi, a, e1), 0, -1)
 
     elif nlenses == 3:
-        a, r3, e1, e2 = params["a"], params["r3"], params["e1"], params["e2"]
+        s, q, q3, r3, psi = params["s"], params["q"], params["q3"], params["r3"], params["psi"]
+        a = 0.5*s
+        e1 = q/(1 + q + q3)
+        e2 = q*e1
+        r3 = r3*jnp.exp(1j*psi)
+        _params = {"a": a, "r3": r3, "e1": e1, "e2": e2}
         coeffs = jnp.moveaxis(_poly_coeffs_critical_triple(phi, a, r3, e1, e2), 0, -1)
 
     else:
@@ -1611,7 +1618,11 @@ def critical_and_caustic_curves(npts=200, nlenses=2, **params):
     z_cr = z_cr.T
 
     # Caustics are critical curves mapped by the lens equation
-    z_ca = lens_eq(z_cr, nlenses=nlenses, **params)
+    z_ca = lens_eq(z_cr, nlenses=nlenses, **_params)
+
+    # Shift by the centre of mass
+    x_cm = 0.5*s*(1-q)/(1 + q)
+    z_cr, z_ca = z_cr - x_cm, z_ca - x_cm
 
     return z_cr, z_ca
 
@@ -1619,7 +1630,7 @@ def critical_and_caustic_curves(npts=200, nlenses=2, **params):
 @partial(
     jit, static_argnames=("nlenses", "roots_itmax", "roots_compensated", "custom_init")
 )
-def images_point_source(
+def _images_point_source(
     w,
     nlenses=2,
     roots_itmax=2500,
@@ -1692,7 +1703,7 @@ def _images_point_source_sequential(
 
     def fn(w, z_init=None, custom_init=False):
         if custom_init:
-            z, z_mask = images_point_source(
+            z, z_mask = _images_point_source(
                 w,
                 nlenses=nlenses,
                 roots_itmax=roots_itmax,
@@ -1702,7 +1713,7 @@ def _images_point_source_sequential(
                 **params,
             )
         else:
-            z, z_mask = images_point_source(
+            z, z_mask = _images_point_source(
                 w,
                 nlenses=nlenses,
                 roots_itmax=roots_itmax,
@@ -1732,23 +1743,23 @@ def mag_point_source(w, nlenses=2, roots_itmax=2500, roots_compensated=False, **
     """
     Compute the magnification of a point source for a system with `nlenses`
     lenses. If `nlenses` is 2 (binary lens) or 3 (triple lens), the coordinate
-    system is set such that the first two lenses with mass fractions
-    `$e1=m_1/m_\mathrm{total}$` and `$e2=m_2/m_\mathrm{total}$` are positioned
-    on the x-axis at locations $r_1=a$ and $r_2=-a$ respectively. The third
-    lens is at an arbitrary position in the complex plane $r_3$. For a single lens
-    lens the magnification is computed analytically. For binary and triple
-    lenses computing the magnification involves solving for the roots of a
-    complex polynomial with degree (`nlenses`**2 + 1) using the Elrich-Aberth
-    algorithm.
+    system is set up such that the the origin is at the center of mass of the 
+    first two lenses which are both located on the real line. The location of 
+    the first lens is -sq/(1 + q) and the second lens is at s/(1 + q). The 
+    optional third lens is located at an arbitrary position in the complex plane 
+    r3*e^(-i*psi). For a single lens lens the magnification is computed 
+    analytically. For binary and triple lenses computing the magnification 
+    involves solving for the roots of a complex polynomial with degree 
+    (`nlenses`**2 + 1) using the Elrich-Aberth algorithm.
 
     Args:
         w (array_like): Source position in the complex plane.
-        **a (float): Half the separation between the first two lenses located on
-            the real line with $r_1 = a$ and $r_2 = -a$.
-        **r3 (float): The position of the third lens at arbitrary location in
-            the complex plane.
-        **e1 (array_like): Mass fraction of the first lens located at $r_1=a$.
-        **e2 (array_like): Mass fraction of the second lens located at $r_2=-a$.
+        **s (float): Separation between the two lenses. The first lens is located 
+            at -sq/(1 + q) and the second lens is at s/(1 + q) on the real line.
+        **q (float): Mass ratio defined as m2/m1.
+        **q3 (float): Mass ratio defined as m3/m1.
+        **r3 (float): Magnitude of the complex position of the third lens.
+        **psi (float): Phase angle of the complex position of the third lens.
         **roots_itmax (int, optional): Number of iterations for the root solver.
         **roots_compensated (bool, optional): Whether to use the compensated
             arithmetic version of the Ehrlich-Aberth root solver.
@@ -1756,13 +1767,38 @@ def mag_point_source(w, nlenses=2, roots_itmax=2500, roots_compensated=False, **
     Returns:
         array_like: The point source magnification evaluated at w.
     """
-    z, z_mask = images_point_source(
+    if nlenses == 1:
+        _params = {}
+    elif nlenses == 2:
+        s, q = params["s"], params["q"]
+        a = 0.5*s
+        e1 = 1/(1 + q)
+        _params = {"a": a, "e1": e1}
+
+        # Shift w by x_cm
+        x_cm = a*(1 - q)/(1 + q)
+        w += x_cm
+    elif nlenses == 3:
+        s, q, q3, r3, psi = params["s"], params["q"], params["q3"], params["r3"], params["psi"]
+        a = 0.5*s
+        e1 = q/(1 + q + q3)
+        e2 = q*e1
+        r3 = r3*jnp.exp(1j*psi)
+        _params = {"a": a, "r3": r3, "e1": e1, "e2": e2}
+
+        # Shift w by x_cm
+        x_cm = a*(1 - q)/(1 + q)
+        w += x_cm
+    else:
+        raise ValueError("`nlenses` has to be set to be <= 3.")
+
+    z, z_mask = _images_point_source(
         w,
         nlenses=nlenses,
         roots_itmax=roots_itmax,
         roots_compensated=roots_compensated,
-        **params
+        **_params
     )
-    det = lens_eq_det_jac(z, nlenses=nlenses, **params)
+    det = lens_eq_det_jac(z, nlenses=nlenses, **_params)
     mag = (1.0 / jnp.abs(det)) * z_mask 
     return mag.sum(axis=0).reshape(w.shape)

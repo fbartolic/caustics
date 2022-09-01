@@ -12,9 +12,6 @@ import numpy as np
 import jax.numpy as jnp
 from jax import jit, vmap, lax, random
 
-from . import (
-    images_point_source,
-)
 from .integrate import (
     _integrate_unif,
     _integrate_ld,
@@ -29,6 +26,7 @@ from .utils import (
 
 from .point_source_magnification import (
     lens_eq_det_jac,
+    _images_point_source,
     _images_point_source_sequential,
 )
 
@@ -86,7 +84,7 @@ def _images_of_source_limb(
         u2 = random.uniform(key2, shape=z_init.shape, minval=-1e-6, maxval=1e-6)
         z_init = z_init + u1 + u2 * 1j
 
-        z, z_mask = images_point_source(
+        z, z_mask = _images_point_source(
             rho * jnp.exp(1j * theta) + w0,
             nlenses=nlenses,
             roots_itmax=roots_itmax,
@@ -753,8 +751,18 @@ def mag_extended_source(
     **params,
 ):
     """
-    Compute the magnification of an extended source with radius `rho` for a
-    system with `nlenses` lenses.
+    Compute the magnification of an extended source with radius `rho` for a 
+    system with `nlenses` lenses. If `nlenses` is 2 (binary lens) or 3 
+    (triple lens), the coordinate system is set up such that the the origin is 
+    at the center of mass of the first two lenses which are both located on the 
+    real line. The location of the first lens is -sq/(1 + q) and the second lens 
+    is at s/(1 + q). The optional third lens is located at an arbitrary position 
+    in the complex plane r3*e^(-i*psi). The magnification is computed using 
+    contour integration in the image plane. Boolean flag `limb_darkening` 
+    indicated whether linear limb-darkening needs to taken into account. If 
+    `limb_darkening` is set to True the linear limb-darkening coefficient 
+    u1 needs to be specified as well. Note that turning on this flag slows down 
+    the computation by up to an order of magnitude.
 
     Args:
         w0 (complex): Source position in the complex plane.
@@ -771,12 +779,12 @@ def mag_extended_source(
         npts_ld (int, optional): Number of points at which the stellar brightness
             function is evaluated when computing the integrals P and Q from
             Dominik 1998. Defaults to 100.
-        **a (float): Half the separation between the first two lenses located on
-            the real line with $r_1 = a$ and $r_2 = -a$.
-        **r3 (float): The position of the third lens at arbitrary location in
-            the complex plane.
-        **e1 (array_like): Mass fraction of the first lens located at $r_1=a$.
-        **e2 (array_like): Mass fraction of the second lens located at $r_2=-a$.
+        **s (float): Separation between the two lenses. The first lens is located 
+            at -sq/(1 + q) and the second lens is at s/(1 + q) on the real line.
+        **q (float): Mass ratio defined as m2/m1.
+        **q3 (float): Mass ratio defined as m3/m1.
+        **r3 (float): Magnitude of the complex position of the third lens.
+        **psi (float): Phase angle of the complex position of the third lens.
         **roots_itmax (int, optional): Number of iterations for the root solver.
         **roots_compensated (bool, optional): Whether to use the compensated
             arithmetic version of the Ehrlich-Aberth root solver.
@@ -784,6 +792,31 @@ def mag_extended_source(
     Returns:
         float: Total magnification.
     """
+    if nlenses == 1:
+        _params = {}
+    elif nlenses == 2:
+        s, q = params["s"], params["q"]
+        a = 0.5*s
+        e1 = 1/(1 + q)
+        _params = {"a": a, "e1": e1}
+
+        # Shift w by x_cm
+        x_cm = a*(1 - q)/(1 + q)
+        w0 += x_cm
+    elif nlenses == 3:
+        s, q, q3, r3, psi = params["s"], params["q"], params["q3"], params["r3"], params["psi"]
+        a = 0.5*s
+        e1 = q/(1 + q + q3)
+        e2 = q*e1
+        r3 = r3*jnp.exp(1j*psi)
+        _params = {"a": a, "r3": r3, "e1": e1, "e2": e2}
+
+        # Shift w by x_cm
+        x_cm = a*(1 - q)/(1 + q)
+        w0 += x_cm
+    else:
+        raise ValueError("`nlenses` has to be set to be <= 3.")
+
     # Get ordered point source images at the source limb
     z, z_mask, z_parity = _images_of_source_limb(
         w0,
@@ -792,7 +825,7 @@ def mag_extended_source(
         npts=npts_limb,
         roots_itmax=roots_itmax,
         roots_compensated=roots_compensated,
-        **params,
+        **_params,
     )
 
     # Integration function depending on whether the source is limb-darkened
@@ -805,7 +838,7 @@ def mag_extended_source(
             u1=u1,
             nlenses=nlenses,
             npts=npts_ld,
-            **params,
+            **_params,
         )
 
     else:

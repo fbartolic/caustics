@@ -51,16 +51,16 @@ def mag_espl_lee_ld(w_points, rho, u1=0.0):
     )
 
 
-def mag_vbb_binary(w0, rho, a, e1, u1=0.0, accuracy=1e-05):
+def mag_vbb_binary(w0, rho, s, q, u1=0.0, accuracy=1e-05):
+    e1 = 1/(1 + q)
     e2 = 1 - e1
-    x_cm = (e1 - e2) * a
-    bl = mm.BinaryLens(e2, e1, 2 * a)
+    bl = mm.BinaryLens(e2, e1, s)
     return bl.vbbl_magnification(
-        w0.real - x_cm, w0.imag, rho, accuracy=accuracy, u_limb_darkening=u1
+        w0.real, w0.imag, rho, accuracy=accuracy, u_limb_darkening=u1
     )
 
 @partial(jit, static_argnames=("npts_limb", "npts_ld", "limb_darkening"))
-def mag_binary(w_points, rho, a, e1, u1=0., npts_limb=300, npts_ld=100, limb_darkening=False):
+def mag_binary(w_points, rho, s, q, u1=0., npts_limb=300, npts_ld=100, limb_darkening=False):
     def body_fn(_, w):
         mag = mag_extended_source(
             w,
@@ -70,8 +70,8 @@ def mag_binary(w_points, rho, a, e1, u1=0., npts_limb=300, npts_ld=100, limb_dar
             limb_darkening=limb_darkening,
             npts_ld=npts_ld,
             u1=u1,
-            a=a,
-            e1=e1,
+            s=s,
+            q=q,
         )
         return 0, mag
 
@@ -80,9 +80,11 @@ def mag_binary(w_points, rho, a, e1, u1=0., npts_limb=300, npts_ld=100, limb_dar
 
 
 def get_points_and_params_binary(rho, npts=50):
-    a, e1  = 0.45, 0.8
+    s, q = 0.9, 0.2
+    a, e1  = 0.5*s, 1/(1 + q)
+
     _, caustic_curves = critical_and_caustic_curves(
-        npts=npts, nlenses=2, a=a, e1=e1
+        npts=npts, nlenses=2, s=s, q=q
     )
     caustic_curves = caustic_curves.reshape(-1)
 
@@ -92,13 +94,17 @@ def get_points_and_params_binary(rho, npts=50):
     phi = random.uniform(subkey1, caustic_curves.shape, minval=-np.pi, maxval=np.pi)
     r = random.uniform(subkey2, caustic_curves.shape, minval=0., maxval=2*rho)
     w_test = caustic_curves + r*np.exp(1j*phi)
-    return w_test, {'a': a, 'e1': e1}
+    return w_test, {'a': a, 'e1': e1, 's': s, 'q': q}
 
 def get_points_and_params_triple(rho, npts=50):
     a, e1, e2, r3 = 0.698, 0.02809, 0.9687, -0.0197 - 0.95087j
+    psi = jnp.arctan2(r3.imag, r3.real)
+    s = 0.5*a
+    q = e2/e1
+    q3 = (1 - e1-e2)/e1
 
     _, caustic_curves = critical_and_caustic_curves(
-        npts=npts, nlenses=3, a=a, e1=e1, e2=e2, r3=r3
+        npts=npts, nlenses=3, s=s, q=q, q3=q3, r3=jnp.abs(r3), psi=psi
     )
     caustic_curves = caustic_curves.reshape(-1)
 
@@ -115,10 +121,11 @@ def get_points_and_params_triple(rho, npts=50):
 @pytest.mark.parametrize("rho", [1e-01, 1e-02, 1e-03])
 def test_images_of_source_limb(rho, npts_limb=500):
     w_test, params = get_points_and_params_triple(rho)
+    a, e1, e2, r3 = params['a'], params['e1'], params['e2'], params['r3']
 
     for w in w_test:
         z, z_mask, z_parity = _images_of_source_limb(
-            w, rho, nlenses=3, npts=npts_limb,  **params
+            w, rho, nlenses=3, npts=npts_limb,  a=a, e1=e1, e2=e2, r3=r3
         )
 
         # Check that there are no identical points
@@ -255,12 +262,12 @@ def test_mag_extended_source_binary_unif(rho, npts_limb=400, rtol=1e-03):
     w_test, params = get_points_and_params_binary(rho)
 
     mags = mag_binary(
-        w_test, rho, params['a'], params['e1'], npts_limb=npts_limb, 
+        w_test, rho, params['s'], params['q'], npts_limb=npts_limb, 
     )
 
     mags_vbb = np.array(
         [
-            mag_vbb_binary(w, rho, params['a'], params['e1'], u1=0.0, accuracy=1e-05) for w in w_test
+            mag_vbb_binary(w, rho, params['s'], params['q'], u1=0.0, accuracy=1e-05) for w in w_test
         ]
     )
 
@@ -268,17 +275,17 @@ def test_mag_extended_source_binary_unif(rho, npts_limb=400, rtol=1e-03):
 
 
 @pytest.mark.parametrize("rho", [1., 1e-01, 1e-02, 1e-03])
-def test_mag_extended_source_binary_ld(rho, u1=0.7, npts_limb=400, npts_ld=100, rtol=1e-03):
+def test_mag_extended_source_binary_ld(rho, u1=0.7, npts_limb=500, npts_ld=100, rtol=1e-03):
     w_test, params = get_points_and_params_binary(rho, npts=5)
 
     # Compute the magnification with `caustics` and VBB
     mags = mag_binary(
-        w_test, rho, params['a'], params['e1'], npts_limb=npts_limb, 
+        w_test, rho, params['s'], params['q'], npts_limb=npts_limb, 
         limb_darkening=True, npts_ld=npts_ld, u1=u1
     )
 
     mags_vbb = np.array(
-        [mag_vbb_binary(w, rho, params['a'], params['e1'], u1=u1, accuracy=1e-05) for w in w_test]
+        [mag_vbb_binary(w, rho, params['s'], params['q'], u1=u1, accuracy=1e-05) for w in w_test]
     )
 
     assert np.all(np.abs((mags - mags_vbb) / mags_vbb) < rtol)
@@ -288,16 +295,16 @@ def test_mag_extended_source_binary_ld(rho, u1=0.7, npts_limb=400, npts_ld=100, 
 def test_grad_mag_extended_source_binary(
     rho, u1=0.7, npts_limb=300, npts_ld=100, rtol=1e-03
 ):
-    a, e1  = 0.45, 0.8
+    s, q = 0.9, 0.2
     _, caustic_curves = critical_and_caustic_curves(
-        npts=50, nlenses=2, a=a, e1=e1
+        npts=50, nlenses=2, s=s, q=q
     )
     caustic_curves = caustic_curves.reshape(-1)
 
     w0 = caustic_curves[0]
 
     def fn(params):
-        a, e1, rho, u1 = params
+        s, q, rho, u1 = params
         return mag_extended_source(
             w0,
             rho,
@@ -306,16 +313,16 @@ def test_grad_mag_extended_source_binary(
             npts_limb=npts_limb,
             limb_darkening=True,
             npts_ld=npts_ld,
-            e1=e1,
-            a=a,
+            s=s,
+            q=q,
         )
 
     grad_fn_fwd = jit(jacfwd(fn))
     grad_fn_rev = jit(jacrev(fn))
 
-    jac_fwd = grad_fn_fwd(jnp.array([a, e1, rho, u1]))
-    jac_rev = grad_fn_rev(jnp.array([a, e1, rho, u1]))
-    jac_finite_diff = approx_fprime(np.array([a, e1, rho, u1]), fn, epsilon=1e-09)
+    jac_fwd = grad_fn_fwd(jnp.array([s, q, rho, u1]))
+    jac_rev = grad_fn_rev(jnp.array([s, q, rho, u1]))
+    jac_finite_diff = approx_fprime(np.array([s, q, rho, u1]), fn, epsilon=1e-09)
 
     err_fwd = jnp.abs((jac_fwd - jac_finite_diff)/jac_finite_diff)
     err_rev = jnp.abs((jac_rev - jac_finite_diff)/jac_finite_diff)
