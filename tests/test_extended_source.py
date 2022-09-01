@@ -8,7 +8,7 @@ from jax import jit, random, vmap
 from jax.config import config
 from jax import lax, jacrev, jacfwd
 
-from caustics.extended_source_magnification import (
+from caustics.extended_source import (
     _images_of_source_limb,
     _split_segment,
     _get_segments,
