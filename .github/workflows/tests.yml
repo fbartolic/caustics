@@ -30,8 +30,8 @@ jobs:
     - name: Root solver tests
       run: pytest --quiet tests/test_ehrlich_aberth_primitive.py
     - name: Point source tests
-      run: pytest --quiet tests/test_point_source_magnification.py  
+      run: pytest --quiet tests/test_point_source.py  
     - name: Utils tests
       run: pytest --quiet tests/test_utils.py  
     - name: Extended source tests
-      run: pytest --quiet tests/test_extended_source_magnification.py  
+      run: pytest --quiet tests/test_extended_source.py  
