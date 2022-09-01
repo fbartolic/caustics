@@ -9,7 +9,7 @@ from jax.config import config
 from jax.test_util import check_grads
 
 from caustics.ehrlich_aberth_primitive import poly_roots
-from caustics.point_source_magnification import _poly_coeffs_binary
+from caustics.point_source import _poly_coeffs_binary
 
 
 config.update("jax_platform_name", "cpu")
