@@ -8,13 +8,13 @@ __all__ = [
     "mag",
 ]
 
-from .point_source_magnification import (
+from .point_source import (
     lens_eq,
     mag_point_source,
     critical_and_caustic_curves,
 )
 
-from .extended_source_magnification import (
+from .extended_source import (
     mag_extended_source,
 )
 
