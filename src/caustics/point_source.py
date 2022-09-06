@@ -1581,6 +1581,24 @@ def lens_eq_det_jac(z, nlenses=2, **params):
 
 @partial(jit, static_argnames=("npts", "nlenses"))
 def critical_and_caustic_curves(npts=200, nlenses=2, **params):
+    """
+    Compute critical and caustic curves for visualization purposes.
+
+    Args:
+        **npts (int): Number of points to when computing the critical curves.
+        **nlenses (int): Number of lenses in the system.
+        **s (float): Separation between the two lenses. The first lens is located 
+            at -sq/(1 + q) and the second lens is at s/(1 + q) on the real line.
+        **q (float): Mass ratio defined as m2/m1.
+        **q3 (float): Mass ratio defined as m3/m1.
+        **r3 (float): Magnitude of the complex position of the third lens.
+        **psi (float): Phase angle of the complex position of the third lens.
+
+    Returns:
+        tuple: Tuple (critical_curves, caustic_curves) where both elements are
+            arrays with shape (`nlenses`, `npts`) containing continuous segments of 
+            the critical curves and caustics.
+    """
     phi = jnp.linspace(-np.pi, np.pi, npts)
 
     def apply_match_points(carry, z):
@@ -1700,7 +1718,6 @@ def _images_point_source_sequential(
     subsequent images are initialized using the previous images as a starting
     point.
     """
-
     def fn(w, z_init=None, custom_init=False):
         if custom_init:
             z, z_mask = _images_point_source(
@@ -1745,19 +1762,20 @@ def mag_point_source(w, nlenses=2, roots_itmax=2500, roots_compensated=False, **
     lenses. If `nlenses` is 2 (binary lens) or 3 (triple lens), the coordinate
     system is set up such that the the origin is at the center of mass of the 
     first two lenses which are both located on the real line. The location of 
-    the first lens is -sq/(1 + q) and the second lens is at s/(1 + q). The 
+    the first lens is $-sq/(1 + q)$ and the second lens is at $s/(1 + q)$. The 
     optional third lens is located at an arbitrary position in the complex plane 
-    r3*e^(-i*psi). For a single lens lens the magnification is computed 
+    $r_3e^{-i*psi}$. For a single lens lens the magnification is computed 
     analytically. For binary and triple lenses computing the magnification 
     involves solving for the roots of a complex polynomial with degree 
     (`nlenses`**2 + 1) using the Elrich-Aberth algorithm.
 
     Args:
         w (array_like): Source position in the complex plane.
+        **nlenses (int): Number of lenses in the system.
         **s (float): Separation between the two lenses. The first lens is located 
-            at -sq/(1 + q) and the second lens is at s/(1 + q) on the real line.
-        **q (float): Mass ratio defined as m2/m1.
-        **q3 (float): Mass ratio defined as m3/m1.
+            at $-sq/(1 + q)$ and the second lens is at $s/(1 + q)$ on the real line.
+        **q (float): Mass ratio defined as $m_2/m_1$.
+        **q3 (float): Mass ratio defined as $m_3/m_1$.
         **r3 (float): Magnitude of the complex position of the third lens.
         **psi (float): Phase angle of the complex position of the third lens.
         **roots_itmax (int, optional): Number of iterations for the root solver.
