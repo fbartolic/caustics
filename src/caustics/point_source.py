@@ -1592,9 +1592,9 @@ def critical_and_caustic_curves(npts=200, nlenses=2, **params):
         npts (int): Number of points to when computing the critical curves.
         nlenses (int): Number of lenses in the system.
         s (float): Separation between the two lenses. The first lens is located 
-            at -sq/(1 + q) and the second lens is at s/(1 + q) on the real line.
-        q (float): Mass ratio defined as m2/m1.
-        q3 (float): Mass ratio defined as m3/m1.
+            at $-sq/(1 + q)$ and the second lens is at $s/(1 + q)$ on the real line.
+        q (float): Mass ratio defined as $m_2/m_1$.
+        q3 (float): Mass ratio defined as $m_3/m_1$.
         r3 (float): Magnitude of the complex position of the third lens.
         psi (float): Phase angle of the complex position of the third lens.
 

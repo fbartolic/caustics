@@ -787,12 +787,14 @@ def mag_extended_source(
             limb-darkening coefficient needs to be specified. Defaults to False.
         u1 (float, optional): Linear limb darkening coefficient. Defaults to 0..
         npts_ld (int, optional): Number of points at which the stellar brightness
-            function is evaluated when computing the integrals P and Q from
-            Dominik 1998. Defaults to 100.
+            function is evaluated when computing contour integrals 
+            $\int P(z_1^\prime, z_2) dz_1^\prime$ and 
+            $\int Q(z_1, z_2^\prime) dz_2^\prime$ (see Dominik 1998). Defaults 
+            to 100.
         s (float): Separation between the two lenses. The first lens is located 
-            at -sq/(1 + q) and the second lens is at s/(1 + q) on the real line.
-        q (float): Mass ratio defined as m2/m1.
-        q3 (float): Mass ratio defined as m3/m1.
+            at $-sq/(1 + q)$ and the second lens is at $s/(1 + q)$ on the real line.
+        q (float): Mass ratio defined as $m_2/m_1$.
+        q3 (float): Mass ratio defined as $m_3/m_1$.
         r3 (float): Magnitude of the complex position of the third lens.
         psi (float): Phase angle of the complex position of the third lens.
         roots_itmax (int, optional): Number of iterations for the root solver.
