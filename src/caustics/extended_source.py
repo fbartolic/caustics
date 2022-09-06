@@ -755,18 +755,28 @@ def mag_extended_source(
     system with `nlenses` lenses. If `nlenses` is 2 (binary lens) or 3 
     (triple lens), the coordinate system is set up such that the the origin is 
     at the center of mass of the first two lenses which are both located on the 
-    real line. The location of the first lens is -sq/(1 + q) and the second lens 
-    is at s/(1 + q). The optional third lens is located at an arbitrary position 
-    in the complex plane r3*e^(-i*psi). The magnification is computed using 
+    real line. The location of the first lens is $-sq/(1 + q)$ and the second lens 
+    is at $s/(1 + q)$. The optional third lens is located at an arbitrary position 
+    in the complex plane $r_3e^{-i*\psi}$. The magnification is computed using 
     contour integration in the image plane. Boolean flag `limb_darkening` 
     indicated whether linear limb-darkening needs to taken into account. If 
     `limb_darkening` is set to True the linear limb-darkening coefficient 
-    u1 needs to be specified as well. Note that turning on this flag slows down 
-    the computation by up to an order of magnitude.
+    u1 needs to be specified as well. 
+
+    If `nlenses` is 2 only the parameters `s` and `q` should be specified. If 
+    `nlenses` is 3, the parameters `s`, `q`, `q3`, `r3` and `psi` should be 
+    specified.
+
+    !!! note
+
+        Turning on limb-darkening (`limb_darkening=True`) slows down the 
+        computation by up to an order of magnitude.
+
 
     Args:
         w0 (complex): Source position in the complex plane.
         rho (float): Source radius in Einstein radii.
+        nlenses (int): Number of lenses in the system.
         npts_limb (int, optional): Initial number of points uniformly distributed
             on the source limb when computing the point source magnification.
             The final number of points is greater than this value because
@@ -779,18 +789,18 @@ def mag_extended_source(
         npts_ld (int, optional): Number of points at which the stellar brightness
             function is evaluated when computing the integrals P and Q from
             Dominik 1998. Defaults to 100.
-        **s (float): Separation between the two lenses. The first lens is located 
+        s (float): Separation between the two lenses. The first lens is located 
             at -sq/(1 + q) and the second lens is at s/(1 + q) on the real line.
-        **q (float): Mass ratio defined as m2/m1.
-        **q3 (float): Mass ratio defined as m3/m1.
-        **r3 (float): Magnitude of the complex position of the third lens.
-        **psi (float): Phase angle of the complex position of the third lens.
-        **roots_itmax (int, optional): Number of iterations for the root solver.
-        **roots_compensated (bool, optional): Whether to use the compensated
+        q (float): Mass ratio defined as m2/m1.
+        q3 (float): Mass ratio defined as m3/m1.
+        r3 (float): Magnitude of the complex position of the third lens.
+        psi (float): Phase angle of the complex position of the third lens.
+        roots_itmax (int, optional): Number of iterations for the root solver.
+        roots_compensated (bool, optional): Whether to use the compensated
             arithmetic version of the Ehrlich-Aberth root solver.
 
     Returns:
-        float: Total magnification.
+        float: Total magnification at the source position `w0`.
     """
     if nlenses == 1:
         _params = {}

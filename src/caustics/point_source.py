@@ -1584,15 +1584,19 @@ def critical_and_caustic_curves(npts=200, nlenses=2, **params):
     """
     Compute critical and caustic curves for visualization purposes.
 
+    If `nlenses` is 2 only the parameters `s` and `q` should be specified. If 
+    `nlenses` is 3, the parameters `s`, `q`, `q3`, `r3` and `psi` should be 
+    specified.
+
     Args:
-        **npts (int): Number of points to when computing the critical curves.
-        **nlenses (int): Number of lenses in the system.
-        **s (float): Separation between the two lenses. The first lens is located 
+        npts (int): Number of points to when computing the critical curves.
+        nlenses (int): Number of lenses in the system.
+        s (float): Separation between the two lenses. The first lens is located 
             at -sq/(1 + q) and the second lens is at s/(1 + q) on the real line.
-        **q (float): Mass ratio defined as m2/m1.
-        **q3 (float): Mass ratio defined as m3/m1.
-        **r3 (float): Magnitude of the complex position of the third lens.
-        **psi (float): Phase angle of the complex position of the third lens.
+        q (float): Mass ratio defined as m2/m1.
+        q3 (float): Mass ratio defined as m3/m1.
+        r3 (float): Magnitude of the complex position of the third lens.
+        psi (float): Phase angle of the complex position of the third lens.
 
     Returns:
         tuple: Tuple (critical_curves, caustic_curves) where both elements are
@@ -1764,22 +1768,26 @@ def mag_point_source(w, nlenses=2, roots_itmax=2500, roots_compensated=False, **
     first two lenses which are both located on the real line. The location of 
     the first lens is $-sq/(1 + q)$ and the second lens is at $s/(1 + q)$. The 
     optional third lens is located at an arbitrary position in the complex plane 
-    $r_3e^{-i*psi}$. For a single lens lens the magnification is computed 
+    $r_3e^{-i\psi}$. For a single lens lens the magnification is computed 
     analytically. For binary and triple lenses computing the magnification 
     involves solving for the roots of a complex polynomial with degree 
     (`nlenses`**2 + 1) using the Elrich-Aberth algorithm.
 
+    If `nlenses` is 2 only the parameters `s` and `q` should be specified. If 
+    `nlenses` is 3, the parameters `s`, `q`, `q3`, `r3` and `psi` should be 
+    specified.
+
     Args:
         w (array_like): Source position in the complex plane.
-        **nlenses (int): Number of lenses in the system.
-        **s (float): Separation between the two lenses. The first lens is located 
+        nlenses (int): Number of lenses in the system.
+        s (float): Separation between the two lenses. The first lens is located 
             at $-sq/(1 + q)$ and the second lens is at $s/(1 + q)$ on the real line.
-        **q (float): Mass ratio defined as $m_2/m_1$.
-        **q3 (float): Mass ratio defined as $m_3/m_1$.
-        **r3 (float): Magnitude of the complex position of the third lens.
-        **psi (float): Phase angle of the complex position of the third lens.
-        **roots_itmax (int, optional): Number of iterations for the root solver.
-        **roots_compensated (bool, optional): Whether to use the compensated
+        q (float): Mass ratio defined as $m_2/m_1$.
+        q3 (float): Mass ratio defined as $m_3/m_1$.
+        r3 (float): Magnitude of the complex position of the third lens.
+        psi (float): Phase angle of the complex position of the third lens.
+        roots_itmax (int, optional): Number of iterations for the root solver.
+        roots_compensated (bool, optional): Whether to use the compensated
             arithmetic version of the Ehrlich-Aberth root solver.
 
     Returns:

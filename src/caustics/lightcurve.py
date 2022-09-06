@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Function for computing the magnification of an extended source at an arbitrary
+Computing the magnification of an extended source at an arbitrary
 set of points in the source plane.
 """
 __all__ = [
@@ -109,29 +109,44 @@ def mag(
     **params
 ):
     """
-    Compute the magnification for a system with `nlenses` and an extended
-    limb-darkned source at a set of complex points `w_points` in the source plane.
-    This function calls either `mag_hexadecapole` or `mag_extended_source` for
-    each point in `w_points` depending on whether or not the hexadecapole
-    approximation is good enough.
+    Compute the extended source magnification for a system with `nlenses` lenses 
+    and a source star radius `rho` at a set of complex points `w_points` in the 
+    source plane. This function calls either [`caustics.mag_hexadecapole`][] or 
+    [`caustics.mag_extended_source`][] at each point in `w_points` depending on
+    whether or not the hexadecapole approximation is accurate enough at that point. 
 
-    If `nlenses` is 2 (binary lens) or 3 (triple lens), the coordinate
-    system is set such that the first two lenses with mass fractions
-    `$e1=m_1/m_\mathrm{total}$` and `$e2=m_2/m_\mathrm{total}$` are positioned
-    on the x-axis at locations $r_1=a$ and $r_2=-a$ respectively. The third
-    lens is at an arbitrary position in the complex plane $r_3$. For a single lens
-    lens the magnification is computed analytically. For binary and triple
-    lenses computing the magnification involves solving for the roots of a
-    complex polynomial with degree (`nlenses`**2 + 1) using the Elrich-Aberth
-    algorithm. Optional keywords `itmax` and `compensated` can be passed to the
-    root solver as a dictionary. `itmax` is the number of root solver iterations,
-    it defaults to `2500`, and `compensated` specifies whether the root solver
-    should use the compensated version of or the Elrich-Aberth algorithm or the
-    regular version, it defaults to `False`.
+    If `nlenses` is 2 (binary lens) or 3 (triple lens), the coordinate system is
+    set up such that the the origin is at the center of mass of the first two 
+    lenses which are both located on the real line. The location of the first 
+    lens is $-sq/(1 + q)$ and the second lens is at $s/(1 + q)$. The optional 
+    third lens is located at an arbitrary position in the complex plane 
+    $r_3e^{-i\psi}$. The magnification is computed using contour integration in
+    the image plane. Boolean flag `limb_darkening` indicates whether linear 
+    limb-darkening needs to taken into account. If `limb_darkening` is set to 
+    `True` the linear limb-darkening coefficient `u1` needs to be specified as 
+    well. Note that turning on this flag slows down the computation by up to an 
+    order of magnitude.
+
+    If `nlenses` is 2 only the parameters `s` and `q` should be specified. If 
+    `nlenses` is 3, the parameters `s`, `q`, `q3`, `r3` and `psi` should be 
+    specified.
+
+    !!! note
+
+        Turning on limb-darkening (`limb_darkening=True`) slows down the 
+        computation by up to an order of magnitude.
+    
+    !!! warning
+
+        At the moment the test determining whether or not to use the hexadecapole
+        approximation does not work for triple lenses so the function will use
+        full contour integration at every point. This substantially slows down
+        the computation. See https://github.com/fbartolic/caustics/issues/19.
 
     Args:
         w_points (array_like): Source positions in the complex plane.
         rho (float): Source radius in Einstein radii.
+        nlenses (int): Number of lenses in the system.
         npts_limb (int, optional): Initial number of points uniformly distributed
             on the source limb when computing the point source magnification.
             The final number of points is greater than this value because
@@ -144,14 +159,14 @@ def mag(
         npts_ld (int, optional): Number of points at which the stellar brightness
             function is evaluated when computing the integrals P and Q from
             Dominik 1998. Defaults to 50.
-        **s (float): Separation between the two lenses. The first lens is located 
+        s (float): Separation between the two lenses. The first lens is located 
             at -sq/(1 + q) and the second lens is at s/(1 + q) on the real line.
-        **q (float): Mass ratio defined as m2/m1.
-        **q3 (float): Mass ratio defined as m3/m1.
-        **r3 (float): Magnitude of the complex position of the third lens.
-        **psi (float): Phase angle of the complex position of the third lens.
-        **roots_itmax (int, optional): Number of iterations for the root solver.
-        **roots_compensated (bool, optional): Whether to use the compensated
+        q (float): Mass ratio defined as m2/m1.
+        q3 (float): Mass ratio defined as m3/m1.
+        r3 (float): Magnitude of the complex position of the third lens.
+        psi (float): Phase angle of the complex position of the third lens.
+        roots_itmax (int, optional): Number of iterations for the root solver.
+        roots_compensated (bool, optional): Whether to use the compensated
             arithmetic version of the Ehrlich-Aberth root solver.
 
     Returns:
