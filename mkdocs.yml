@@ -1,0 +1,83 @@
+theme:
+  name: "material"
+  features:
+          - navigation.sections  
+          - toc.integrate  
+          - header.autohide  
+  palette:
+      - scheme: default
+        primary: white
+        accent: amber
+        toggle:
+          icon: material/weather-night
+          name: Switch to dark mode
+      - scheme: slate
+        primary: black
+        accent: amber
+        toggle:
+          icon: material/weather-sunny
+          name: Switch to light mode
+  icon:
+      repo: fontawesome/brands/github  # github logo
+  logo: _static/logo_docs.svg
+  favicon: _static/logo_docs.svg
+
+
+site_name: caustics
+site_description: Documentation for the caustics package.
+site_author: Fran Bartolich 
+
+repo_url: https://github.com/fbartolic/caustics
+repo_name: fbartolic/caustics
+
+extra_javascript: 
+    # MathJax support, https://squidfunk.github.io/mkdocs-material/reference/mathjax/
+    - _static/mathjax.js
+    - https://polyfill.io/v3/polyfill.min.js?features=es6
+    - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+
+markdown_extensions:
+    - pymdownx.arithmatex:  # LaTeX via MathJax
+        generic: true
+    - pymdownx.superfences  # syntax highlighting
+    - pymdownx.details  # expandable regions denoted by ???
+    - pymdownx.snippets:  
+        base_path: docs
+    - admonition
+    - toc:
+        permalink: "¤"  # clickable link to each section heading
+        toc_depth: 4  
+plugins:
+    - search  
+    - autorefs  # cross-links to headings
+    - mknotebooks  # Jupyter notebooks
+    - mkdocstrings:
+        handlers:
+            python:
+                setup_commands:
+                    - import pytkdocs_tweaks
+                    - pytkdocs_tweaks.main()
+
+                selection:
+                    inherited_members: true  
+                rendering:
+                    show_root_heading: true  
+                    show_root_full_path: true  
+                    show_if_no_docstring: true
+                    show_signature_annotations: true
+                    show_source: false  
+                    members_order: source  
+                    heading_level: 4  
+nav:
+    - 'index.md'
+    - Basic API:
+      - 'api/point_source.md'
+      - 'api/extended_source.md'
+      - 'api/lightcurve.md'
+
+#    - Introduction:
+#      -
+#    - Usage:
+#      -
+#    - Tutorials:
+#      -
