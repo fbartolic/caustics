@@ -17,7 +17,7 @@
     
     
       
-        <title>Lightcurve - caustics</title>
+        <title>Linear algebra - caustics</title>
       
     
     
@@ -76,7 +76,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#lightcurve" class="md-skip">
+        <a href="#linear-algebra" class="md-skip">
           Skip to content
         </a>
       
@@ -108,7 +108,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Lightcurve
+              Linear algebra
             
           </span>
         </div>
@@ -312,6 +312,20 @@
               
   
   
+  
+    <li class="md-nav__item">
+      <a href="../lightcurve/" class="md-nav__link">
+        Lightcurve
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
     
   
   
@@ -324,12 +338,12 @@
       
       
         <label class="md-nav__link md-nav__link--active" for="__toc">
-          Lightcurve
+          Linear algebra
           <span class="md-nav__icon md-icon"></span>
         </label>
       
       <a href="./" class="md-nav__link md-nav__link--active">
-        Lightcurve
+        Linear algebra
       </a>
       
         
@@ -348,16 +362,16 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#caustics.lightcurve" class="md-nav__link">
-    lightcurve
+  <a href="#caustics.linalg" class="md-nav__link">
+    linalg
   </a>
   
-    <nav class="md-nav" aria-label="lightcurve">
+    <nav class="md-nav" aria-label="linalg">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#caustics.lightcurve.mag" class="md-nav__link">
-    mag()
+  <a href="#caustics.linalg.marginalized_log_likelihood" class="md-nav__link">
+    marginalized_log_likelihood()
   </a>
   
 </li>
@@ -371,20 +385,6 @@
   
 </nav>
       
-    </li>
-  
-
-            
-          
-            
-              
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../linalg/" class="md-nav__link">
-        Linear algebra
-      </a>
     </li>
   
 
@@ -408,29 +408,86 @@
             <article class="md-content__inner md-typeset">
               
                 
-  <a href="https://github.com/fbartolic/caustics/edit/master/docs/api/lightcurve.md" title="Edit this page" class="md-content__button md-icon">
+  <a href="https://github.com/fbartolic/caustics/edit/master/docs/api/linalg.md" title="Edit this page" class="md-content__button md-icon">
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20.71 7.04c.39-.39.39-1.04 0-1.41l-2.34-2.34c-.37-.39-1.02-.39-1.41 0l-1.84 1.83 3.75 3.75M3 17.25V21h3.75L17.81 9.93l-3.75-3.75L3 17.25Z"/></svg>
   </a>
 
 
 
-<h1 id="lightcurve">Lightcurve<a class="headerlink" href="#lightcurve" title="Permanent link">¤</a></h1>
+<h1 id="linear-algebra">Linear algebra<a class="headerlink" href="#linear-algebra" title="Permanent link">¤</a></h1>
+<p>This module contains a function <code>marginalized_log_likelihood</code> which computes
+the log likelihood of a microlensing model marginalized over the linear flux
+parameters <span class="arithmatex">\(\beta\equiv(F_s,F_b)^\intercal\)</span>. This function is intended to be 
+used a as replacement for the standard likelihood function when optimizing 
+the likelihood or doing MCMC.</p>
+<p>The marginalization is standard practice when fitting microlensing events 
+because it reduces the number of 
+parameters in the model by the number of linear parameters in the model. For 
+light curves consisting of multiple independent observations (for example, those 
+observed by different observatories) this is a necessary step because there 
+could be dozens of linear parameters in the model. The way this is traditionally 
+done in microlensing is by solving for the linear parameters conditional on 
+fixed values of the nonlinear parameters using linear least squares. This 
+procedure is justified in some circumstances but it is not valid if the 
+data covariance matrix is dense (for example, if we are using a Gaussian Process
+to model correlated noise in the light curves or stellar variability of the source 
+star). Below, I show how to analytically marginalize over the linear parameters 
+in the general case.</p>
+<p>The observed flux <span class="arithmatex">\(\mathbf f\)</span> can be written as a linear model 
+\begin{equation}
+\mathbf f = \mathbf M\,\boldsymbol\beta
+\end{equation}
+where <span class="arithmatex">\(\mathbf M\)</span> is the design matrix which depends on some nonlinear parameters <span class="arithmatex">\(\boldsymbol\theta\)</span>:</p>
+<div class="arithmatex">\[\begin{equation}
+    \mathbf{M}\equiv \begin{pmatrix}
+        \tilde{A}(t_1;\boldsymbol\theta)     &amp; 1   \\
+        \tilde{A}(t_2;\boldsymbol\theta)     &amp; 1  \\
+        \vdots                          &amp; \vdots \\
+        \tilde{A}(t_{N};\boldsymbol\theta) &amp; 1
+    \end{pmatrix}
+\end{equation}\]</div>
+<p>Assuming that we place a Gaussian prior on the linear parameters <span class="arithmatex">\(\boldsymbol\beta\)</span>
+with mean <span class="arithmatex">\(\boldsymbol\mu\)</span> and covariance <span class="arithmatex">\(\boldsymbol\Lambda\)</span>, <a href="https://arxiv.org/abs/2005.14199">one can show</a> 
+that the marginal likelihood 
+<span class="arithmatex">\(\ln\int p(\mathbf f|\boldsymbol\theta)\,p(\boldsymbol\beta|\boldsymbol\theta)d\boldsymbol\beta\)</span>
+is given by</p>
+<div class="arithmatex">\[\begin{equation} 
+\mathrm{LL}(\boldsymbol\theta)=-\frac{1}{2}\left( \mathbf{f}-\mathbf{M}\boldsymbol{\mu}\right)^\intercal\left(\mathbf{C} + \mathbf{M}\boldsymbol{\Lambda}\mathbf{M}^\intercal\right)^{-1}
+\left( \mathbf{f}-\mathbf{M}\boldsymbol{\mu}\right)     
+- \frac{1}{2}\ln\left| \mathbf{C} + \mathbf{M}\boldsymbol{\Lambda}\mathbf{M}^\intercal\right|
+\end{equation}\]</div>
+<p>To compute the inverse and the determinant of the covariance matrix of marginalized likelihood we 
+can use the matrix inversion lemma (see Appendix A3 of <a href="https://gaussianprocess.org/gpml/">R&amp;W</a>):</p>
+<div class="arithmatex">\[\begin{align}
+     &amp; \left(\mathbf{C}+\mathbf{M} \boldsymbol{\Lambda} \mathbf{M}^{\intercal}\right)^{-1}=\mathbf{C}^{-1}-\mathbf{C}^{-1} \mathbf{M}\left(\boldsymbol{\Lambda}^{-1}+\mathbf{M}^{\intercal} \mathbf{C}^{-1} \mathbf{M}\right)^{-1} \mathbf{M}^{\intercal} \mathbf{C}^{-1} \\
+     &amp; \ln\left|\mathbf{C}+\mathbf{M} \mathbf{\Lambda} \mathbf{M}^{\intercal}\right|=\ln|\mathbf{C}| +\ln|\boldsymbol{\Lambda}| + \ln\left|\boldsymbol{\Lambda}^{-1}+\mathbf{M}^{\intercal} \mathbf{C}^{-1} \mathbf{M}\right|
+\end{align}\]</div>
+<p>However, if we marginalize over the linear parameters, how can we obtain their values in order to, for example, produce 
+a plot of the model fit? The answer, from the paper linked above, is that the distribution over <span class="arithmatex">\(\boldsymbol\beta\)</span>
+conditional on particular values of the nonlinear parameters <span class="arithmatex">\(\boldsymbol\theta\)</span> is a Gaussian 
+<span class="arithmatex">\(\mathcal{N}(\boldsymbol\beta;\mathbf a,\mathbf A)\)</span> where</p>
+<div class="arithmatex">\[\begin{align}
+&amp;\mathbf{A}^{-1}=\boldsymbol\Lambda^{-1}+\mathbf{M}^{\intercal}\mathbf{C}^{-1}\mathbf{M} \\
+&amp;\mathbf a = \mathbf A\left(\boldsymbol\Lambda^{-1}\boldsymbol\mu+\mathbf{M}^{\intercal}\mathbf{C}^{-1}\mathbf{f}\right)
+\end{align}\]</div>
+<p>If we had posterior samples of the nonlinear parameters <span class="arithmatex">\(\boldsymbol\theta\)</span> we could 
+could use this distribution to generate samples of the linear parameters.</p>
+<p>In <code>marginalized_log_likelihood</code> I use the standard least squares solution for <span class="arithmatex">\(\boldsymbol\beta\)</span> 
+if the data covariance matrix is diagonal because it's faster than the matrix 
+operations in <span class="arithmatex">\(\mathrm{LL}(boldsymbol\theta)\)</span>. Otherwise I use the full analytic marginalization.</p>
 
 
 <div class="doc doc-object doc-module">
 
 
 
-<h2 id="caustics.lightcurve" class="doc doc-heading">
-          <code>caustics.lightcurve</code>
+<h2 id="caustics.linalg" class="doc doc-heading">
+          <code>caustics.linalg</code>
 
 
-<a href="#caustics.lightcurve" class="headerlink" title="Permanent link">¤</a></h2>
+<a href="#caustics.linalg" class="headerlink" title="Permanent link">¤</a></h2>
 
   <div class="doc doc-contents first">
-  
-      <p>Computing the magnification of an extended source at an arbitrary
-set of points in the source plane.</p>
 
   
 
@@ -448,47 +505,25 @@ set of points in the source plane.</p>
 
 
 
-<h3 id="caustics.lightcurve.mag" class="doc doc-heading">
-<code class="highlight language-python"><span class="n">mag</span><span class="p">(</span><span class="n">w_points</span><span class="p">,</span> <span class="n">rho</span><span class="p">,</span> <span class="n">nlenses</span> <span class="o">=</span> <span class="mi">2</span><span class="p">,</span> <span class="n">npts_limb</span> <span class="o">=</span> <span class="mi">200</span><span class="p">,</span> <span class="n">limb_darkening</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="n">u1</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span> <span class="n">npts_ld</span> <span class="o">=</span> <span class="mi">100</span><span class="p">,</span> <span class="n">roots_itmax</span> <span class="o">=</span> <span class="mi">2500</span><span class="p">,</span> <span class="n">roots_compensated</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">params</span><span class="p">)</span></code>
+<h3 id="caustics.linalg.marginalized_log_likelihood" class="doc doc-heading">
+<code class="highlight language-python"><span class="n">marginalized_log_likelihood</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">fobs</span><span class="p">,</span> <span class="n">C_inv</span><span class="p">,</span> <span class="n">dense_covariance</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="n">Lam_sd</span> <span class="o">=</span> <span class="mf">10000.0</span><span class="p">)</span></code>
 
-<a href="#caustics.lightcurve.mag" class="headerlink" title="Permanent link">¤</a></h3>
+<a href="#caustics.linalg.marginalized_log_likelihood" class="headerlink" title="Permanent link">¤</a></h3>
 
 
   <div class="doc doc-contents ">
   
-      <p>Compute the extended source magnification for a system with <code>nlenses</code> lenses 
-and a source star radius <code>rho</code> at a set of complex points <code>w_points</code> in the 
-source plane. This function calls either 
-[<code>caustics.multipole._mag_hexadecapole</code>] or 
-<a class="autorefs autorefs-internal" href="../extended_source/#caustics.extended_source.mag_extended_source"><code>caustics.mag_extended_source</code></a> at each point
-in <code>w_points</code> depending on whether or not the hexadecapole approximation is
-accurate enough at that point. </p>
-<p>If <code>nlenses</code> is 2 (binary lens) or 3 (triple lens), the coordinate system is
-set up such that the the origin is at the center of mass of the first two 
-lenses which are both located on the real line. The location of the first 
-lens is <span class="arithmatex">\(-sq/(1 + q)\)</span> and the second lens is at <span class="arithmatex">\(s/(1 + q)\)</span>. The optional 
-third lens is located at an arbitrary position in the complex plane 
-<span class="arithmatex">\(r_3e^{-i\psi}\)</span>. The magnification is computed using contour integration in
-the image plane. Boolean flag <code>limb_darkening</code> indicates whether linear 
-limb-darkening needs to taken into account. If <code>limb_darkening</code> is set to 
-<code>True</code> the linear limb-darkening coefficient <code>u1</code> needs to be specified as 
-well. Note that turning on this flag slows down the computation by up to an 
-order of magnitude.</p>
-<p>If <code>nlenses</code> is 2 only the parameters <code>s</code> and <code>q</code> should be specified. If 
-<code>nlenses</code> is 3, the parameters <code>s</code>, <code>q</code>, <code>q3</code>, <code>r3</code> and <code>psi</code> should be 
-specified.</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>Turning on limb-darkening (<code>limb_darkening=True</code>) slows down the 
-computation by up to an order of magnitude.</p>
-</div>
-<div class="admonition warning">
-<p class="admonition-title">Warning</p>
-<p>At the moment the test determining whether or not to use the hexadecapole
-approximation does not work for triple lenses so the function will use
-full contour integration at every point. This substantially slows down
-the computation. See https://github.com/fbartolic/caustics/issues/19.</p>
-</div>
+      <p>Compute the log-likelihood for a microlensing light curve marginalized over
+over the linear flux parameters <span class="arithmatex">\(\boldsymbol\beta\equiv(F_s, F_b)^\intercal\)</span>. 
+If <code>dense_covariance</code> is False, the inverse data covariance matrix <code>C_inv</code> 
+is assumed to be a 1D vector containing the elements on the diagonal. In 
+that case, the most efficient way to marginalize over the linear parameters 
+in the likelihood is to solve the linear least squares problem conditional 
+on fixed values of the nonlinear parameters (which determine the 
+magnification <code>A</code>). If <code>dense_covariance</code> is True, <code>C_inv</code> is assumed to be 
+a dense matrix and in that case we have to compute the full marginal 
+likelihood. This increases the computational cost of the likelihood 
+evaluation.</p>
 
   <p><strong>Parameters:</strong></p>
   <table>
@@ -502,146 +537,60 @@ the computation. See https://github.com/fbartolic/caustics/issues/19.</p>
     </thead>
     <tbody>
         <tr>
-          <td><code>w_points</code></td>
+          <td><code>A</code></td>
           <td>
                 <code>array_like</code>
           </td>
-          <td><p>Source positions in the complex plane.</p></td>
+          <td><p>1D magnification array.</p></td>
           <td>
               <em>required</em>
           </td>
         </tr>
         <tr>
-          <td><code>rho</code></td>
+          <td><code>fobs</code></td>
           <td>
-                <code>float</code>
+                <code>array_like</code>
           </td>
-          <td><p>Source radius in Einstein radii.</p></td>
+          <td><p>1D observed flux array.</p></td>
           <td>
               <em>required</em>
           </td>
         </tr>
         <tr>
-          <td><code>nlenses</code></td>
+          <td><code>C_inv</code></td>
           <td>
-                <code>int</code>
+                <code>array_like</code>
           </td>
-          <td><p>Number of lenses in the system.</p></td>
+          <td><p>Inverse data covariance matrix. If <code>dense_covariance</code>
+is False, this is a 1D vector containing the diagonal elements of the
+covariance matrix. If <code>dense_covariance</code> is True, this is a dense
+matrix.</p></td>
           <td>
-                <code>2</code>
-          </td>
-        </tr>
-        <tr>
-          <td><code>npts_limb</code></td>
-          <td>
-                <code>int</code>
-          </td>
-          <td><p>Initial number of points uniformly distributed
-on the source limb when computing the point source magnification.
-The final number of points is greater than this value because
-the number of points is decreased geometrically by a factor of
-1/2 until it reaches 2.</p></td>
-          <td>
-                <code>200</code>
+              <em>required</em>
           </td>
         </tr>
         <tr>
-          <td><code>limb_darkening</code></td>
+          <td><code>dense_covariance</code></td>
           <td>
                 <code>bool</code>
           </td>
-          <td><p>If True, compute the magnification of
-a limb-darkened source. If limb_darkening is enabled the u1 linear
-limb-darkening coefficient needs to be specified. Defaults to False.</p></td>
+          <td><p>Flag indicating whether <code>C_inv</code> is 
+dense or diagonal. Defaults to False.</p></td>
           <td>
                 <code>False</code>
           </td>
         </tr>
         <tr>
-          <td><code>u1</code></td>
+          <td><code>Lam_sd</code></td>
           <td>
                 <code>float</code>
           </td>
-          <td><p>Linear limb darkening coefficient. Defaults to 0..</p></td>
+          <td><p>Standard deviation of the Gaussian prior on 
+the linear flux parameters. The prior is assumed to be a zero mean
+independent Gaussian with standard deviation <code>Lam_sd</code> for both linear 
+parameters. Defaults to 1e04.</p></td>
           <td>
-                <code>0.0</code>
-          </td>
-        </tr>
-        <tr>
-          <td><code>npts_ld</code></td>
-          <td>
-                <code>int</code>
-          </td>
-          <td><p>Number of points at which the stellar brightness
-function is evaluated when computing contour integrals 
-<span class="arithmatex">\(\int P(z_1^\prime, z_2) dz_1^\prime\)</span> and 
-<span class="arithmatex">\(\int Q(z_1, z_2^\prime) dz_2^\prime\)</span> (see Dominik 1998). Defaults 
-to 100.
-s (float): Separation between the two lenses. The first lens is located 
-at <span class="arithmatex">\(-sq/(1 + q)\)</span> and the second lens is at <span class="arithmatex">\(s/(1 + q)\)</span> on the real line.</p></td>
-          <td>
-                <code>100</code>
-          </td>
-        </tr>
-        <tr>
-          <td><code>q</code></td>
-          <td>
-                <code>float</code>
-          </td>
-          <td><p>Mass ratio defined as <span class="arithmatex">\(m_2/m_1\)</span>.</p></td>
-          <td>
-              <em>required</em>
-          </td>
-        </tr>
-        <tr>
-          <td><code>q3</code></td>
-          <td>
-                <code>float</code>
-          </td>
-          <td><p>Mass ratio defined as <span class="arithmatex">\(m_3/m_1\)</span>.</p></td>
-          <td>
-              <em>required</em>
-          </td>
-        </tr>
-        <tr>
-          <td><code>r3</code></td>
-          <td>
-                <code>float</code>
-          </td>
-          <td><p>Magnitude of the complex position of the third lens.</p></td>
-          <td>
-              <em>required</em>
-          </td>
-        </tr>
-        <tr>
-          <td><code>psi</code></td>
-          <td>
-                <code>float</code>
-          </td>
-          <td><p>Phase angle of the complex position of the third lens.</p></td>
-          <td>
-              <em>required</em>
-          </td>
-        </tr>
-        <tr>
-          <td><code>roots_itmax</code></td>
-          <td>
-                <code>int</code>
-          </td>
-          <td><p>Number of iterations for the root solver.</p></td>
-          <td>
-                <code>2500</code>
-          </td>
-        </tr>
-        <tr>
-          <td><code>roots_compensated</code></td>
-          <td>
-                <code>bool</code>
-          </td>
-          <td><p>Whether to use the compensated
-arithmetic version of the Ehrlich-Aberth root solver.</p></td>
-          <td>
-                <code>False</code>
+                <code>10000.0</code>
           </td>
         </tr>
     </tbody>
@@ -657,9 +606,24 @@ arithmetic version of the Ehrlich-Aberth root solver.</p></td>
     </thead>
     <tbody>
         <tr>
-<td><code>array_like</code></td>          <td>
+<td><code>tuple</code></td>          <td>
           </td>
-          <td><p>Magnification array.</p></td>
+          <td><p>If <code>dense_covariance</code> is False, returns a tuple </p></td>
+        </tr>
+        <tr>
+<td></td>          <td>
+          </td>
+          <td><p><span class="arithmatex">\((\boldsymbol\beta, \mathrm{LL}(\boldsymbol\theta))\)</span> containing the </p></td>
+        </tr>
+        <tr>
+<td></td>          <td>
+          </td>
+          <td><p>least-squares solution for the linear parameters and the log-likelihood.</p></td>
+        </tr>
+        <tr>
+<td></td>          <td>
+          </td>
+          <td><p>Otherwise, the first element of the tuple is 0.</p></td>
         </tr>
     </tbody>
   </table>
@@ -693,7 +657,7 @@ arithmetic version of the Ehrlich-Aberth root solver.</p></td>
     <nav class="md-footer__inner md-grid" aria-label="Footer" >
       
         
-        <a href="../extended_source/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Extended source" rel="prev">
+        <a href="../lightcurve/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Lightcurve" rel="prev">
           <div class="md-footer__button md-icon">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
           </div>
@@ -702,26 +666,11 @@ arithmetic version of the Ehrlich-Aberth root solver.</p></td>
               <span class="md-footer__direction">
                 Previous
               </span>
-              Extended source
+              Lightcurve
             </div>
           </div>
         </a>
       
-      
-        
-        <a href="../linalg/" class="md-footer__link md-footer__link--next" aria-label="Next: Linear algebra" rel="next">
-          <div class="md-footer__title">
-            <div class="md-ellipsis">
-              <span class="md-footer__direction">
-                Next
-              </span>
-              Linear algebra
-            </div>
-          </div>
-          <div class="md-footer__button md-icon">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11H4Z"/></svg>
-          </div>
-        </a>
       
     </nav>
   

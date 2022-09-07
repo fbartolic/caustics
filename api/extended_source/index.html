@@ -338,6 +338,19 @@
     extended_source
   </a>
   
+    <nav class="md-nav" aria-label="extended_source">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#caustics.extended_source.mag_extended_source" class="md-nav__link">
+    mag_extended_source()
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
     </ul>
@@ -357,6 +370,20 @@
     <li class="md-nav__item">
       <a href="../lightcurve/" class="md-nav__link">
         Lightcurve
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../linalg/" class="md-nav__link">
+        Linear algebra
       </a>
     </li>
   
@@ -394,11 +421,11 @@
 
 
 
-<h4 id="caustics.extended_source" class="doc doc-heading">
+<h2 id="caustics.extended_source" class="doc doc-heading">
           <code>caustics.extended_source</code>
 
 
-<a href="#caustics.extended_source" class="headerlink" title="Permanent link">¤</a></h4>
+<a href="#caustics.extended_source" class="headerlink" title="Permanent link">¤</a></h2>
 
   <div class="doc doc-contents first">
   
@@ -420,10 +447,10 @@
 
 
 
-<h5 id="caustics.extended_source.mag_extended_source" class="doc doc-heading">
+<h3 id="caustics.extended_source.mag_extended_source" class="doc doc-heading">
 <code class="highlight language-python"><span class="n">mag_extended_source</span><span class="p">(</span><span class="n">w0</span><span class="p">,</span> <span class="n">rho</span><span class="p">,</span> <span class="n">nlenses</span> <span class="o">=</span> <span class="mi">2</span><span class="p">,</span> <span class="n">npts_limb</span> <span class="o">=</span> <span class="mi">150</span><span class="p">,</span> <span class="n">limb_darkening</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="n">u1</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span> <span class="n">npts_ld</span> <span class="o">=</span> <span class="mi">100</span><span class="p">,</span> <span class="n">roots_itmax</span> <span class="o">=</span> <span class="mi">2500</span><span class="p">,</span> <span class="n">roots_compensated</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">params</span><span class="p">)</span></code>
 
-<a href="#caustics.extended_source.mag_extended_source" class="headerlink" title="Permanent link">¤</a></h5>
+<a href="#caustics.extended_source.mag_extended_source" class="headerlink" title="Permanent link">¤</a></h3>
 
 
   <div class="doc doc-contents ">
@@ -432,14 +459,21 @@
 system with <code>nlenses</code> lenses. If <code>nlenses</code> is 2 (binary lens) or 3 
 (triple lens), the coordinate system is set up such that the the origin is 
 at the center of mass of the first two lenses which are both located on the 
-real line. The location of the first lens is -sq/(1 + q) and the second lens 
-is at s/(1 + q). The optional third lens is located at an arbitrary position 
-in the complex plane r3<em>e^(-i</em>psi). The magnification is computed using 
+real line. The location of the first lens is <span class="arithmatex">\(-sq/(1 + q)\)</span> and the second lens 
+is at <span class="arithmatex">\(s/(1 + q)\)</span>. The optional third lens is located at an arbitrary position 
+in the complex plane <span class="arithmatex">\(r_3e^{-i*\psi}\)</span>. The magnification is computed using 
 contour integration in the image plane. Boolean flag <code>limb_darkening</code> 
 indicated whether linear limb-darkening needs to taken into account. If 
 <code>limb_darkening</code> is set to True the linear limb-darkening coefficient 
-u1 needs to be specified as well. Note that turning on this flag slows down 
-the computation by up to an order of magnitude.</p>
+u1 needs to be specified as well. </p>
+<p>If <code>nlenses</code> is 2 only the parameters <code>s</code> and <code>q</code> should be specified. If 
+<code>nlenses</code> is 3, the parameters <code>s</code>, <code>q</code>, <code>q3</code>, <code>r3</code> and <code>psi</code> should be 
+specified.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Turning on limb-darkening (<code>limb_darkening=True</code>) slows down the 
+computation by up to an order of magnitude.</p>
+</div>
 
   <p><strong>Parameters:</strong></p>
   <table>
@@ -470,6 +504,16 @@ the computation by up to an order of magnitude.</p>
           <td><p>Source radius in Einstein radii.</p></td>
           <td>
               <em>required</em>
+          </td>
+        </tr>
+        <tr>
+          <td><code>nlenses</code></td>
+          <td>
+                <code>int</code>
+          </td>
+          <td><p>Number of lenses in the system.</p></td>
+          <td>
+                <code>2</code>
           </td>
         </tr>
         <tr>
@@ -514,45 +558,47 @@ limb-darkening coefficient needs to be specified. Defaults to False.</p></td>
                 <code>int</code>
           </td>
           <td><p>Number of points at which the stellar brightness
-function is evaluated when computing the integrals P and Q from
-Dominik 1998. Defaults to 100.</p></td>
+function is evaluated when computing contour integrals 
+<span class="arithmatex">\(\int P(z_1^\prime, z_2) dz_1^\prime\)</span> and 
+<span class="arithmatex">\(\int Q(z_1, z_2^\prime) dz_2^\prime\)</span> (see Dominik 1998). Defaults 
+to 100.</p></td>
           <td>
                 <code>100</code>
           </td>
         </tr>
         <tr>
-          <td><code>**s</code></td>
+          <td><code>s</code></td>
           <td>
                 <code>float</code>
           </td>
           <td><p>Separation between the two lenses. The first lens is located 
-at -sq/(1 + q) and the second lens is at s/(1 + q) on the real line.</p></td>
+at <span class="arithmatex">\(-sq/(1 + q)\)</span> and the second lens is at <span class="arithmatex">\(s/(1 + q)\)</span> on the real line.</p></td>
           <td>
               <em>required</em>
           </td>
         </tr>
         <tr>
-          <td><code>**q</code></td>
+          <td><code>q</code></td>
           <td>
                 <code>float</code>
           </td>
-          <td><p>Mass ratio defined as m2/m1.</p></td>
+          <td><p>Mass ratio defined as <span class="arithmatex">\(m_2/m_1\)</span>.</p></td>
           <td>
               <em>required</em>
           </td>
         </tr>
         <tr>
-          <td><code>**q3</code></td>
+          <td><code>q3</code></td>
           <td>
                 <code>float</code>
           </td>
-          <td><p>Mass ratio defined as m3/m1.</p></td>
+          <td><p>Mass ratio defined as <span class="arithmatex">\(m_3/m_1\)</span>.</p></td>
           <td>
               <em>required</em>
           </td>
         </tr>
         <tr>
-          <td><code>**r3</code></td>
+          <td><code>r3</code></td>
           <td>
                 <code>float</code>
           </td>
@@ -562,7 +608,7 @@ at -sq/(1 + q) and the second lens is at s/(1 + q) on the real line.</p></td>
           </td>
         </tr>
         <tr>
-          <td><code>**psi</code></td>
+          <td><code>psi</code></td>
           <td>
                 <code>float</code>
           </td>
@@ -572,24 +618,24 @@ at -sq/(1 + q) and the second lens is at s/(1 + q) on the real line.</p></td>
           </td>
         </tr>
         <tr>
-          <td><code>**roots_itmax</code></td>
+          <td><code>roots_itmax</code></td>
           <td>
                 <code>int</code>
           </td>
           <td><p>Number of iterations for the root solver.</p></td>
           <td>
-              <em>required</em>
+                <code>2500</code>
           </td>
         </tr>
         <tr>
-          <td><code>**roots_compensated</code></td>
+          <td><code>roots_compensated</code></td>
           <td>
                 <code>bool</code>
           </td>
           <td><p>Whether to use the compensated
 arithmetic version of the Ehrlich-Aberth root solver.</p></td>
           <td>
-              <em>required</em>
+                <code>False</code>
           </td>
         </tr>
     </tbody>
@@ -607,7 +653,7 @@ arithmetic version of the Ehrlich-Aberth root solver.</p></td>
         <tr>
 <td><code>float</code></td>          <td>
           </td>
-          <td><p>Total magnification.</p></td>
+          <td><p>Total magnification at the source position <code>w0</code>.</p></td>
         </tr>
     </tbody>
   </table>

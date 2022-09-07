@@ -324,6 +324,26 @@
     point_source
   </a>
   
+    <nav class="md-nav" aria-label="point_source">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#caustics.point_source.mag_point_source" class="md-nav__link">
+    mag_point_source()
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#caustics.point_source.critical_and_caustic_curves" class="md-nav__link">
+    critical_and_caustic_curves()
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
     </ul>
@@ -363,6 +383,20 @@
 
             
           
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../linalg/" class="md-nav__link">
+        Linear algebra
+      </a>
+    </li>
+  
+
+            
+          
         </ul>
       </nav>
     </li>
@@ -394,11 +428,11 @@
 
 
 
-<h4 id="caustics.point_source" class="doc doc-heading">
+<h2 id="caustics.point_source" class="doc doc-heading">
           <code>caustics.point_source</code>
 
 
-<a href="#caustics.point_source" class="headerlink" title="Permanent link">¤</a></h4>
+<a href="#caustics.point_source" class="headerlink" title="Permanent link">¤</a></h2>
 
   <div class="doc doc-contents first">
 
@@ -418,10 +452,10 @@
 
 
 
-<h5 id="caustics.point_source.mag_point_source" class="doc doc-heading">
+<h3 id="caustics.point_source.mag_point_source" class="doc doc-heading">
 <code class="highlight language-python"><span class="n">mag_point_source</span><span class="p">(</span><span class="n">w</span><span class="p">,</span> <span class="n">nlenses</span> <span class="o">=</span> <span class="mi">2</span><span class="p">,</span> <span class="n">roots_itmax</span> <span class="o">=</span> <span class="mi">2500</span><span class="p">,</span> <span class="n">roots_compensated</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">params</span><span class="p">)</span></code>
 
-<a href="#caustics.point_source.mag_point_source" class="headerlink" title="Permanent link">¤</a></h5>
+<a href="#caustics.point_source.mag_point_source" class="headerlink" title="Permanent link">¤</a></h3>
 
 
   <div class="doc doc-contents ">
@@ -430,12 +464,15 @@
 lenses. If <code>nlenses</code> is 2 (binary lens) or 3 (triple lens), the coordinate
 system is set up such that the the origin is at the center of mass of the 
 first two lenses which are both located on the real line. The location of 
-the first lens is -sq/(1 + q) and the second lens is at s/(1 + q). The 
+the first lens is <span class="arithmatex">\(-sq/(1 + q)\)</span> and the second lens is at <span class="arithmatex">\(s/(1 + q)\)</span>. The 
 optional third lens is located at an arbitrary position in the complex plane 
-r3<em>e^(-i</em>psi). For a single lens lens the magnification is computed 
+<span class="arithmatex">\(r_3e^{-i\psi}\)</span>. For a single lens lens the magnification is computed 
 analytically. For binary and triple lenses computing the magnification 
 involves solving for the roots of a complex polynomial with degree 
 (<code>nlenses</code>**2 + 1) using the Elrich-Aberth algorithm.</p>
+<p>If <code>nlenses</code> is 2 only the parameters <code>s</code> and <code>q</code> should be specified. If 
+<code>nlenses</code> is 3, the parameters <code>s</code>, <code>q</code>, <code>q3</code>, <code>r3</code> and <code>psi</code> should be 
+specified.</p>
 
   <p><strong>Parameters:</strong></p>
   <table>
@@ -459,38 +496,48 @@ involves solving for the roots of a complex polynomial with degree
           </td>
         </tr>
         <tr>
-          <td><code>**s</code></td>
+          <td><code>nlenses</code></td>
+          <td>
+                <code>int</code>
+          </td>
+          <td><p>Number of lenses in the system.</p></td>
+          <td>
+                <code>2</code>
+          </td>
+        </tr>
+        <tr>
+          <td><code>s</code></td>
           <td>
                 <code>float</code>
           </td>
           <td><p>Separation between the two lenses. The first lens is located 
-at -sq/(1 + q) and the second lens is at s/(1 + q) on the real line.</p></td>
+at <span class="arithmatex">\(-sq/(1 + q)\)</span> and the second lens is at <span class="arithmatex">\(s/(1 + q)\)</span> on the real line.</p></td>
           <td>
               <em>required</em>
           </td>
         </tr>
         <tr>
-          <td><code>**q</code></td>
+          <td><code>q</code></td>
           <td>
                 <code>float</code>
           </td>
-          <td><p>Mass ratio defined as m2/m1.</p></td>
+          <td><p>Mass ratio defined as <span class="arithmatex">\(m_2/m_1\)</span>.</p></td>
           <td>
               <em>required</em>
           </td>
         </tr>
         <tr>
-          <td><code>**q3</code></td>
+          <td><code>q3</code></td>
           <td>
                 <code>float</code>
           </td>
-          <td><p>Mass ratio defined as m3/m1.</p></td>
+          <td><p>Mass ratio defined as <span class="arithmatex">\(m_3/m_1\)</span>.</p></td>
           <td>
               <em>required</em>
           </td>
         </tr>
         <tr>
-          <td><code>**r3</code></td>
+          <td><code>r3</code></td>
           <td>
                 <code>float</code>
           </td>
@@ -500,7 +547,7 @@ at -sq/(1 + q) and the second lens is at s/(1 + q) on the real line.</p></td>
           </td>
         </tr>
         <tr>
-          <td><code>**psi</code></td>
+          <td><code>psi</code></td>
           <td>
                 <code>float</code>
           </td>
@@ -510,24 +557,24 @@ at -sq/(1 + q) and the second lens is at s/(1 + q) on the real line.</p></td>
           </td>
         </tr>
         <tr>
-          <td><code>**roots_itmax</code></td>
+          <td><code>roots_itmax</code></td>
           <td>
                 <code>int</code>
           </td>
           <td><p>Number of iterations for the root solver.</p></td>
           <td>
-              <em>required</em>
+                <code>2500</code>
           </td>
         </tr>
         <tr>
-          <td><code>**roots_compensated</code></td>
+          <td><code>roots_compensated</code></td>
           <td>
                 <code>bool</code>
           </td>
           <td><p>Whether to use the compensated
 arithmetic version of the Ehrlich-Aberth root solver.</p></td>
           <td>
-              <em>required</em>
+                <code>False</code>
           </td>
         </tr>
     </tbody>
@@ -558,13 +605,122 @@ arithmetic version of the Ehrlich-Aberth root solver.</p></td>
 
 
 
-<h5 id="caustics.point_source.critical_and_caustic_curves" class="doc doc-heading">
+<h3 id="caustics.point_source.critical_and_caustic_curves" class="doc doc-heading">
 <code class="highlight language-python"><span class="n">critical_and_caustic_curves</span><span class="p">(</span><span class="n">npts</span> <span class="o">=</span> <span class="mi">200</span><span class="p">,</span> <span class="n">nlenses</span> <span class="o">=</span> <span class="mi">2</span><span class="p">,</span> <span class="o">**</span><span class="n">params</span><span class="p">)</span></code>
 
-<a href="#caustics.point_source.critical_and_caustic_curves" class="headerlink" title="Permanent link">¤</a></h5>
+<a href="#caustics.point_source.critical_and_caustic_curves" class="headerlink" title="Permanent link">¤</a></h3>
 
 
   <div class="doc doc-contents ">
+  
+      <p>Compute critical and caustic curves for visualization purposes.</p>
+<p>If <code>nlenses</code> is 2 only the parameters <code>s</code> and <code>q</code> should be specified. If 
+<code>nlenses</code> is 3, the parameters <code>s</code>, <code>q</code>, <code>q3</code>, <code>r3</code> and <code>psi</code> should be 
+specified.</p>
+
+  <p><strong>Parameters:</strong></p>
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+        <th>Default</th>
+      </tr>
+    </thead>
+    <tbody>
+        <tr>
+          <td><code>npts</code></td>
+          <td>
+                <code>int</code>
+          </td>
+          <td><p>Number of points to when computing the critical curves.</p></td>
+          <td>
+                <code>200</code>
+          </td>
+        </tr>
+        <tr>
+          <td><code>nlenses</code></td>
+          <td>
+                <code>int</code>
+          </td>
+          <td><p>Number of lenses in the system.</p></td>
+          <td>
+                <code>2</code>
+          </td>
+        </tr>
+        <tr>
+          <td><code>s</code></td>
+          <td>
+                <code>float</code>
+          </td>
+          <td><p>Separation between the two lenses. The first lens is located 
+at <span class="arithmatex">\(-sq/(1 + q)\)</span> and the second lens is at <span class="arithmatex">\(s/(1 + q)\)</span> on the real line.</p></td>
+          <td>
+              <em>required</em>
+          </td>
+        </tr>
+        <tr>
+          <td><code>q</code></td>
+          <td>
+                <code>float</code>
+          </td>
+          <td><p>Mass ratio defined as <span class="arithmatex">\(m_2/m_1\)</span>.</p></td>
+          <td>
+              <em>required</em>
+          </td>
+        </tr>
+        <tr>
+          <td><code>q3</code></td>
+          <td>
+                <code>float</code>
+          </td>
+          <td><p>Mass ratio defined as <span class="arithmatex">\(m_3/m_1\)</span>.</p></td>
+          <td>
+              <em>required</em>
+          </td>
+        </tr>
+        <tr>
+          <td><code>r3</code></td>
+          <td>
+                <code>float</code>
+          </td>
+          <td><p>Magnitude of the complex position of the third lens.</p></td>
+          <td>
+              <em>required</em>
+          </td>
+        </tr>
+        <tr>
+          <td><code>psi</code></td>
+          <td>
+                <code>float</code>
+          </td>
+          <td><p>Phase angle of the complex position of the third lens.</p></td>
+          <td>
+              <em>required</em>
+          </td>
+        </tr>
+    </tbody>
+  </table>
+
+  <p><strong>Returns:</strong></p>
+  <table>
+    <thead>
+      <tr>
+<th>Name</th>        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+        <tr>
+<td><code>tuple</code></td>          <td>
+          </td>
+          <td><p>Tuple (critical_curves, caustic_curves) where both elements are
+arrays with shape (<code>nlenses</code>, <code>npts</code>) containing continuous segments of 
+the critical curves and caustics.</p></td>
+        </tr>
+    </tbody>
+  </table>
 
   </div>
 
