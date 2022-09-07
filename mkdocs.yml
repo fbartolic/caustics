@@ -67,13 +67,14 @@ plugins:
                     show_signature_annotations: true
                     show_source: false  
                     members_order: source  
-                    heading_level: 4  
+#                    heading_level: 4  
 nav:
     - 'index.md'
     - Basic API:
       - 'api/point_source.md'
       - 'api/extended_source.md'
       - 'api/lightcurve.md'
+      - 'api/linalg.md'
 
 #    - Introduction:
 #      -
