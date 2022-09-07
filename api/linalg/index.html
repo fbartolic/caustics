@@ -506,7 +506,7 @@ operations in <span class="arithmatex">\(\mathrm{LL}(boldsymbol\theta)\)</span>.
 
 
 <h3 id="caustics.linalg.marginalized_log_likelihood" class="doc doc-heading">
-<code class="highlight language-python"><span class="n">marginalized_log_likelihood</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">fobs</span><span class="p">,</span> <span class="n">C_inv</span><span class="p">,</span> <span class="n">dense_covariance</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="n">Lam_sd</span> <span class="o">=</span> <span class="mf">10000.0</span><span class="p">)</span></code>
+<code class="highlight language-python"><span class="n">marginalized_log_likelihood</span><span class="p">(</span><span class="n">A_list</span><span class="p">,</span> <span class="n">fobs_list</span><span class="p">,</span> <span class="n">C_inv_list</span><span class="p">,</span> <span class="n">dense_covariance</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="n">Lam_sd</span> <span class="o">=</span> <span class="mf">10000.0</span><span class="p">)</span></code>
 
 <a href="#caustics.linalg.marginalized_log_likelihood" class="headerlink" title="Permanent link">¤</a></h3>
 
@@ -515,14 +515,19 @@ operations in <span class="arithmatex">\(\mathrm{LL}(boldsymbol\theta)\)</span>.
   
       <p>Compute the log-likelihood for a microlensing light curve marginalized over
 over the linear flux parameters <span class="arithmatex">\(\boldsymbol\beta\equiv(F_s, F_b)^\intercal\)</span>. 
-If <code>dense_covariance</code> is False, the inverse data covariance matrix <code>C_inv</code> 
-is assumed to be a 1D vector containing the elements on the diagonal. In 
+The function takes a list of magnification vectors, a list of observed 
+fluxes and a list of inverse data covariance matrices as an input, one element 
+of the list represents and independent set of observations, for instance light 
+curves from different observatories. The total log-likelihood is then a sum 
+of the log-likelihoods for each light curve.</p>
+<p>If <code>dense_covariance</code> is False, the inverse data covariance matrices 
+are assumed to be 1D vectors containing the elements on the diagonal. In 
 that case, the most efficient way to marginalize over the linear parameters 
 in the likelihood is to solve the linear least squares problem conditional 
 on fixed values of the nonlinear parameters (which determine the 
-magnification <code>A</code>). If <code>dense_covariance</code> is True, <code>C_inv</code> is assumed to be 
-a dense matrix and in that case we have to compute the full marginal 
-likelihood. This increases the computational cost of the likelihood 
+magnification). If <code>dense_covariance</code> is True, the inverse covariance matrices 
+are assumed to be dense matrices. In that case we have to compute the full
+marginal likelihood. This increases the computational cost of the likelihood 
 evaluation.</p>
 
   <p><strong>Parameters:</strong></p>
@@ -537,32 +542,34 @@ evaluation.</p>
     </thead>
     <tbody>
         <tr>
-          <td><code>A</code></td>
+          <td><code>A_list</code></td>
           <td>
-                <code>array_like</code>
+                <code>list[array_like]</code>
           </td>
-          <td><p>1D magnification array.</p></td>
-          <td>
-              <em>required</em>
-          </td>
-        </tr>
-        <tr>
-          <td><code>fobs</code></td>
-          <td>
-                <code>array_like</code>
-          </td>
-          <td><p>1D observed flux array.</p></td>
+          <td><p>List of 1D magnification arrays, one per 
+independent observation.</p></td>
           <td>
               <em>required</em>
           </td>
         </tr>
         <tr>
-          <td><code>C_inv</code></td>
+          <td><code>fobs_list</code></td>
           <td>
-                <code>array_like</code>
+                <code>list[array_like]</code>
           </td>
-          <td><p>Inverse data covariance matrix. If <code>dense_covariance</code>
-is False, this is a 1D vector containing the diagonal elements of the
+          <td><p>List of 1D observed flux arrays. </p></td>
+          <td>
+              <em>required</em>
+          </td>
+        </tr>
+        <tr>
+          <td><code>C_inv_list</code></td>
+          <td>
+                <code>list[array_like]</code>
+          </td>
+          <td><p>List of nverse data covariance matrices. 
+If <code>dense_covariance</code>is False, this is a 1D vector containing the 
+diagonal elements of the
 covariance matrix. If <code>dense_covariance</code> is True, this is a dense
 matrix.</p></td>
           <td>
