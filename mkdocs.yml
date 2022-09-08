@@ -74,6 +74,7 @@ nav:
       - 'api/point_source.md'
       - 'api/extended_source.md'
       - 'api/lightcurve.md'
+      - 'api/trajectory.md'
       - 'api/linalg.md'
 
 #    - Introduction:
