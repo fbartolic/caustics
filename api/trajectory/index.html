@@ -1,0 +1,1070 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Documentation for the caustics package.">
+      
+      
+        <meta name="author" content="Fran Bartolich">
+      
+      
+      <link rel="icon" href="../../_static/logo_docs.svg">
+      <meta name="generator" content="mkdocs-1.3.1, mkdocs-material-8.4.2">
+    
+    
+      
+        <title>Trajectory - caustics</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.69437709.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.cbb835fc.min.css">
+        
+      
+      
+    
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="../../css/ansi-colours.css">
+    
+      <link rel="stylesheet" href="../../css/jupyter-cells.css">
+    
+      <link rel="stylesheet" href="../../css/pandas-dataframe.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="white" data-md-color-accent="amber">
+  
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&"object"==typeof palette.color)for(var key of Object.keys(palette.color))document.body.setAttribute("data-md-color-"+key,palette.color[key])</script>
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#trajectory" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="caustics" class="md-header__button md-logo" aria-label="caustics" data-md-component="logo">
+      
+  <img src="../../_static/logo_docs.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2Z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            caustics
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Trajectory
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      <form class="md-header__option" data-md-component="palette">
+        
+          
+          
+          <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="white" data-md-color-accent="amber"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+          
+            <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m17.75 4.09-2.53 1.94.91 3.06-2.63-1.81-2.63 1.81.91-3.06-2.53-1.94L12.44 4l1.06-3 1.06 3 3.19.09m3.5 6.91-1.64 1.25.59 1.98-1.7-1.17-1.7 1.17.59-1.98L15.75 11l2.06-.05L18.5 9l.69 1.95 2.06.05m-2.28 4.95c.83-.08 1.72 1.1 1.19 1.85-.32.45-.66.87-1.08 1.27C15.17 23 8.84 23 4.94 19.07c-3.91-3.9-3.91-10.24 0-14.14.4-.4.82-.76 1.27-1.08.75-.53 1.93.36 1.85 1.19-.27 2.86.69 5.83 2.89 8.02a9.96 9.96 0 0 0 8.02 2.89m-1.64 2.02a12.08 12.08 0 0 1-7.8-3.47c-2.17-2.19-3.33-5-3.49-7.82-2.81 3.14-2.7 7.96.31 10.98 3.02 3.01 7.84 3.12 10.98.31Z"/></svg>
+            </label>
+          
+        
+          
+          
+          <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="black" data-md-color-accent="amber"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_2">
+          
+            <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 7a5 5 0 0 1 5 5 5 5 0 0 1-5 5 5 5 0 0 1-5-5 5 5 0 0 1 5-5m0 2a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3m0-7 2.39 3.42C13.65 5.15 12.84 5 12 5c-.84 0-1.65.15-2.39.42L12 2M3.34 7l4.16-.35A7.2 7.2 0 0 0 5.94 8.5c-.44.74-.69 1.5-.83 2.29L3.34 7m.02 10 1.76-3.77a7.131 7.131 0 0 0 2.38 4.14L3.36 17M20.65 7l-1.77 3.79a7.023 7.023 0 0 0-2.38-4.15l4.15.36m-.01 10-4.14.36c.59-.51 1.12-1.14 1.54-1.86.42-.73.69-1.5.83-2.29L20.64 17M12 22l-2.41-3.44c.74.27 1.55.44 2.41.44.82 0 1.63-.17 2.37-.44L12 22Z"/></svg>
+            </label>
+          
+        
+      </form>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" aria-label="Clear" tabindex="-1">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/fbartolic/caustics" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.1.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    fbartolic/caustics
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="caustics" class="md-nav__button md-logo" aria-label="caustics" data-md-component="logo">
+      
+  <img src="../../_static/logo_docs.svg" alt="logo">
+
+    </a>
+    caustics
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/fbartolic/caustics" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.1.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    fbartolic/caustics
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        Home
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+    
+  
+  
+    
+      
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_2" type="checkbox" id="__nav_2" checked>
+      
+      
+      
+      
+        <label class="md-nav__link" for="__nav_2">
+          Basic API
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="Basic API" data-md-level="1">
+        <label class="md-nav__title" for="__nav_2">
+          <span class="md-nav__icon md-icon"></span>
+          Basic API
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../point_source/" class="md-nav__link">
+        Point source
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../extended_source/" class="md-nav__link">
+        Extended source
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../lightcurve/" class="md-nav__link">
+        Lightcurve
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+    
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" data-md-toggle="toc" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          Trajectory
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        Trajectory
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#annual-parallax" class="md-nav__link">
+    Annual parallax
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#caustics.trajectory" class="md-nav__link">
+    trajectory
+  </a>
+  
+    <nav class="md-nav" aria-label="trajectory">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#caustics.trajectory.AnnualParallaxTrajectory" class="md-nav__link">
+    AnnualParallaxTrajectory
+  </a>
+  
+    <nav class="md-nav" aria-label="AnnualParallaxTrajectory">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#caustics.trajectory.AnnualParallaxTrajectory.t" class="md-nav__link">
+    t
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#caustics.trajectory.AnnualParallaxTrajectory.t_jpl" class="md-nav__link">
+    t_jpl
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#caustics.trajectory.AnnualParallaxTrajectory.coords" class="md-nav__link">
+    coords
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#caustics.trajectory.AnnualParallaxTrajectory.s_e" class="md-nav__link">
+    s_e
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#caustics.trajectory.AnnualParallaxTrajectory.s_n" class="md-nav__link">
+    s_n
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#caustics.trajectory.AnnualParallaxTrajectory.s_e_dot" class="md-nav__link">
+    s_e_dot
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#caustics.trajectory.AnnualParallaxTrajectory.s_n_dot" class="md-nav__link">
+    s_n_dot
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#caustics.trajectory.AnnualParallaxTrajectory.__init__" class="md-nav__link">
+    __init__()
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#caustics.trajectory.AnnualParallaxTrajectory.compute" class="md-nav__link">
+    compute()
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../linalg/" class="md-nav__link">
+        Linear algebra
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          <div class="md-content" data-md-component="content">
+            <article class="md-content__inner md-typeset">
+              
+                
+  <a href="https://github.com/fbartolic/caustics/edit/master/docs/api/trajectory.md" title="Edit this page" class="md-content__button md-icon">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20.71 7.04c.39-.39.39-1.04 0-1.41l-2.34-2.34c-.37-.39-1.02-.39-1.41 0l-1.84 1.83 3.75 3.75M3 17.25V21h3.75L17.81 9.93l-3.75-3.75L3 17.25Z"/></svg>
+  </a>
+
+
+
+<h1 id="trajectory">Trajectory<a class="headerlink" href="#trajectory" title="Permanent link">¤</a></h1>
+<p>This module implements functions for computing the trajectory of the source star 
+in the source plane. For now, only the annual parallax trajectory is implemented 
+(<code>caustics.trajectory.AnnualParallaxTrajectory</code>).</p>
+<h2 id="annual-parallax">Annual parallax<a class="headerlink" href="#annual-parallax" title="Permanent link">¤</a></h2>
+<p>If one were to observe a source star from a barycentric frame of reference, in absence of 
+acceleration of the source star (due to the source star being in a binary system), the 
+apparent motion of the source star on the plane of the sky would be rectilinear. However,
+we do not observe the stars from a barycentric frame of reference, we observe them from a 
+non-intertial geocentric frame (Earth). \emph{Annual parallax} is the apparent motion of
+star due to the Earth's motion around the Sun. It is important for longer timescale events 
+when the event timescale is equal to some non-negligible fraction of the Earth's orbital
+period.</p>
+<p>In a barycentric frame of reference we can write down the position of the source star 
+<span class="arithmatex">\(\mathbf w_S(t)\)</span> and the lens star <span class="arithmatex">\(\mathbf w_L(t)\)</span> as </p>
+<div class="arithmatex">\[\begin{align}
+&amp;\mathbf{w}_S(t)=\mathbf{w}_{S, 0}+\left(t-t_0\right) \boldsymbol{\mu}_S \\
+&amp;\mathbf{w}_L(t)=\mathbf{w}_{L, 0}+\left(t-t_0\right) \boldsymbol{\mu}_L
+\end{align}\]</div>
+<p>where <span class="arithmatex">\(\mu_S\)</span> and <span class="arithmatex">\(\mu_L\)</span> are the proper motion vectors of the source and lens 
+stars, respectively and <span class="arithmatex">\(t_0\)</span> is the time of closest approach of the source to the lens.
+The relative position vector with respect to the source in units of Einstein radii is </p>
+<div class="arithmatex">\[\begin{equation}
+\boldsymbol{u}(t) \equiv \frac{\mathbf{w}_L(t)-\mathbf{w}_S(t)}{\theta_E}=\frac{\mathbf{w}_{L S, 0}}{\theta_E}+\frac{t-t_0}{\theta_E} \boldsymbol{\mu}_{L S}
+\end{equation}\]</div>
+<p>where <span class="arithmatex">\(\mathbf{w}_{L S, 0} \equiv \mathbf{w}_{L, 0}-\mathbf{w}_{S, 0}\)</span> and 
+<span class="arithmatex">\(\boldsymbol{\mu}_{L S} \equiv \boldsymbol{\mu}_L-\boldsymbol{\mu}_S\)</span>.
+When observing the source star from Earth, the from Earth the apparent position of the star 
+is shifted by the position vector of the Sun relative to the Earth <span class="arithmatex">\(\mathbf s\)</span> onto a 
+Geocentric coordinate system on the plane of the sky which is defined at some reference 
+time <span class="arithmatex">\(t_0^\prime\)</span> by the unit vector <span class="arithmatex">\(\hat{\mathbf n}\)</span> normal to the plane of the 
+sky at the source star (a function of the celestial coordinates of the source star) 
+and the unit vectors 
+<span class="arithmatex">\(\hat{\mathbf e}_n\)</span> and <span class="arithmatex">\(\hat{\mathbf e}_e\)</span>, pointing in the direction of the celestial
+north and east, respectively. The coordinate system is defined to be right-handed. The 
+unit vectors <span class="arithmatex">\(\hat{\mathbf e}_n\)</span> and <span class="arithmatex">\(\hat{\mathbf e}_e\)</span> are thus</p>
+<div class="arithmatex">\[\begin{align}
+\hat{\mathbf{e}}_e &amp;=\hat{\mathbf{z}} \times \hat{\mathbf{n}} \\
+\hat{\mathbf{e}}_n &amp;=\hat{\mathbf{n}} \times \hat{\mathbf{e}}_e
+\end{align}\]</div>
+<p>where <span class="arithmatex">\(\hat{\mathbf n}\)</span> is the 3D unit vector pointing the direction of the source star
+and <span class="arithmatex">\(\hat{\mathbf z}=(0,0,1)\)</span>. We can compute the 3D position vector of the Sun 
+<span class="arithmatex">\(\mathbf s(t)\)</span> (and its time derivative) using the <code>astropy</code> function
+<a href="https://docs.astropy.org/en/stable/api/astropy.coordinates.get_body_barycentric_posvel.html"><code>astropy.coordinates.get_body_barycentric_posvel</code></a>
+at arbitrary times <span class="arithmatex">\(t\)</span> and obtain its projection on the plane of the sky by dotting it 
+into the unit vectors: </p>
+<div class="arithmatex">\[\begin{align}
+\zeta_e(t ; \alpha, \delta) &amp; \equiv \mathbf{s} \cdot \hat{\mathbf{e}}_e \\
+\zeta_n(t ; \alpha, \delta) &amp;\equiv \mathbf{s} \cdot \hat{\mathbf{e}}_n
+\end{align}\]</div>
+<p>The sky positions of the source and lens stars in the geocentric frame of reference defined at 
+time <span class="arithmatex">\(t_0^\prime\)</span> are then given by</p>
+<div class="arithmatex">\[\begin{align}
+&amp;\mathbf{w}_S(t)=\mathbf{w}_{S, 0}+\left(t-t_0^{\prime}\right) \boldsymbol{\mu}_S+\pi_S \boldsymbol{\zeta}(t) \\
+&amp;\mathbf{w}_L(t)=\mathbf{w}_{L, 0}+\left(t-t_0^{\prime}\right) \boldsymbol{\mu}_L+\pi_L \boldsymbol{\zeta}(t)
+\end{align}\]</div>
+<p>where <span class="arithmatex">\(\pi_S \equiv 1 \mathrm{au} / D_S\)</span> is the source parallax and <span class="arithmatex">\(\pi_L \equiv 1 \mathrm{au} / D_L\)</span> is the lens parallax. The relative separation vector is </p>
+<div class="arithmatex">\[\begin{equation}
+\boldsymbol{u}(t)=\frac{\mathbf{w}_{L S, 0}}{\theta_E}+\frac{t-t_0^{\prime}}{\theta_E} \boldsymbol{\mu}_{L S}+\pi_E \boldsymbol{\zeta}(t)
+\end{equation}\]</div>
+<p>where <span class="arithmatex">\(\pi_E\equiv \pi_{LS}/\theta_E\)</span>. Because parallax is usually a small effect, it makes 
+sense to decompose the trajectory as a sum of rectilinear motion plus a deviation due to 
+parallax
+(see <a href="https://ui.adsabs.harvard.edu/abs/2002ApJ...572..521A/abstract">An et al. 2002</a> for example). Mathematically, </p>
+<div class="arithmatex">\[\begin{align}
+    \mathbf{u}(t_0^\prime)&amp;\equiv \mathbf{u}_0=\mathbf{w}_{LS}/\theta_E+\pi_E\mathbf{\zeta}(t_0^\prime)\\
+    \dot{\mathbf u}(t_0^\prime)&amp;\equiv \dot{\mathbf u}_0=\mathbf{\mu}_{LS}+\pi_E\dot{\mathbf{\zeta}}(t_0^\prime)
+\end{align}\]</div>
+<p>It then follows that  </p>
+<div class="arithmatex">\[\begin{equation}
+    \boldsymbol{u}(t)=\mathbf{u}(t_0^\prime) + (t-t_0')\,\dot{\mathbf{u}}(t_0^\prime) +
+    \pi_E\,\delta\mathbf\zeta(t)
+\end{equation}\]</div>
+<p>where </p>
+<div class="arithmatex">\[\begin{equation}
+    \delta\boldsymbol \zeta (t)=\boldsymbol \zeta (t)-\boldsymbol \zeta (t_0')-(t-t_0')
+    \boldsymbol{\dot \zeta} (t_0')
+    \label{eq:relative_separation_parallax_decomposed}
+\end{equation}\]</div>
+<p>is the position offset of the Sun on the plane of the sky relative to its position 
+at the reference time <span class="arithmatex">\(t_0^\prime\)</span>. By construction, we have 
+<span class="arithmatex">\(\delta\boldsymbol \zeta (t_0')=0\)</span> and <span class="arithmatex">\(\delta\dot{\boldsymbol \zeta} (t_0')=0\)</span>.
+At the reference time <span class="arithmatex">\(t_0^\prime\)</span>, the vectors <span class="arithmatex">\(\mathbf{u}(t_0^\prime)\)</span> and 
+<span class="arithmatex">\(\dot{\mathbf u}(t_0^\prime)\)</span> are perpendicular to each other.</p>
+<p>To evaluate this expression for the trajectory we need to choose a coordinate system.
+A natural coordinate system for describing the trajectory of the source relative to the 
+lens is one defined by unit vectors
+<span class="arithmatex">\((\mathbf{\hat e}_\bot,\mathbf{\hat e}_\parallel)\)</span> where <span class="arithmatex">\(\mathbf{\hat e}_\parallel\)</span> 
+is parallel to the trajectory <span class="arithmatex">\(\mathbf{u}(t)\)</span> at time <span class="arithmatex">\(t_0^\prime\)</span>.
+We define the unit vectors as</p>
+<div class="arithmatex">\[\begin{equation}
+    \mathbf{\hat e}_\bot\equiv \frac{\mathbf{u}_0}{|\mathbf{u}_0|},\quad
+    \mathbf{\hat e}_\parallel\equiv \frac{\mathbf{\hat n}\times\mathbf{u}_0}{|\mathbf{u}_0|}\quad
+\end{equation}\]</div>
+<p>The coordinate system <span class="arithmatex">\((\mathbf{\hat e}_\bot,\mathbf{\hat e}_\parallel)\)</span> is related to 
+ecliptic coordinates by a simple rotation through an angle <span class="arithmatex">\(\psi\)</span>.</p>
+<p>By construction, at time <span class="arithmatex">\(t_0^\prime\)</span> we have <span class="arithmatex">\(\mathbf{u}_0\,\bot\,\dot{\mathbf{u}}_0\)</span> and 
+the two components of <span class="arithmatex">\(\mathbf{u}(t)\)</span> are then</p>
+<div class="arithmatex">\[\begin{align}
+    u_\bot(t)      &amp; \equiv \mathbf{u}(t)\cdot \mathbf{\hat e}_\bot= u_0 +
+    \pi_E\,\delta\boldsymbol \zeta(t)\cdot\mathbf{\hat e}_\bot                                                                                                                                       \\
+    u_\parallel(t) &amp; \equiv \mathbf{u}(t)\cdot \mathbf{\hat e}_\parallel= (t-t_0^\prime)\,\dot{\mathbf{u}}_0\cdot\mathbf{\hat e}_\parallel+ \pi_E\,\delta\boldsymbol \zeta(t)\cdot\mathbf{\hat e}_\parallel
+\end{align}\]</div>
+<p>using the definitions of the unit vectors and
+<span class="arithmatex">\(\delta\boldsymbol \zeta(t)=
+    \delta \zeta_e(t)\,\mathbf{\hat e}_e+\delta \zeta_n(t)\,\mathbf{\hat e}_n\)</span>, we obtain</p>
+<div class="arithmatex">\[\begin{align}
+    u_\bot(t)      &amp; = u_0 + \pi_E\,\cos\psi\,\delta \zeta_e(t) - \pi_E\,\sin\psi\,\delta \zeta_n(t)
+    \label{eq:u_t_parallel1}                                                                         \\
+    u_\parallel(t) &amp; =(t-t_0^\prime)/t_E^\prime + \pi_E\,\sin\psi\,\delta \zeta_e(t) +
+    \pi_E\,\cos\psi\,\delta \zeta_n(t) \label{eq:u_t_parallel2}
+\end{align}\]</div>
+<p>where </p>
+<div class="arithmatex">\[\begin{equation}
+t_E^\prime =|\dot{\mathbf{u}}_0|=|\boldsymbol\mu_{LS}/\theta_E  + \pi_E\,\dot{\boldsymbol \zeta}(t_0^\prime)|
+\end{equation}\]</div>
+<p>The model parameters which determine the magnification <span class="arithmatex">\(A(t)\)</span> are then
+<span class="arithmatex">\(\left(u_0,t_0^\prime,t'_E,\pi_E,\psi\right)\)</span>. Notice that <span class="arithmatex">\(u_0\)</span> in this case can also be negative.</p>
+<p>An alternative parametrization which is more commonly used in the literature is obtained by
+defining components of a ``microlensing parallax vector'' as</p>
+<div class="arithmatex">\[\begin{align}
+    \pi_{E,N} &amp; \equiv \pi_E\cos\psi \\
+    \pi_{E,E} &amp; \equiv \pi_E\sin\psi
+\end{align}\]</div>
+<p>in which case we have</p>
+<div class="arithmatex">\[\begin{align}
+    u_\bot(t)      &amp; = u_0 + \pi_{E,N}\,\delta \zeta_e(t) - \pi_{E,E}\,\delta \zeta_n(t) \\
+    u_\parallel(t) &amp; =(t-t_0^\prime)/t_E^\prime + \pi_{E,E}\,\delta\zeta_e(t) +
+    \pi_{E,N}\,\delta\zeta_n(t)
+\end{align}\]</div>
+<p>and the model parameters are <span class="arithmatex">\(\left(u_0,t_0^\prime,t_E^\prime,\pi_{E,E},\pi_{E,N}\right)\)</span>.</p>
+<p>Finally, we can also write down the expression for the trajectory vector in equatorial 
+coordinates by applying a rotation matrix to the above vector, the result is </p>
+<div class="arithmatex">\[\begin{align}
+    u_e &amp; =u_0\cos\psi + (t-t_0^\prime)/t_E^\prime\sin\psi + \pi_E\,\delta\zeta_e(t)  \\
+    u_n &amp; =-u_0\sin\psi + (t-t_0^\prime)/t_E^\prime\cos\psi + \pi_E\,\delta\zeta_n(t)
+\end{align}\]</div>
+<p>This last expression is what is computed in the <code>AnnualMicrolensingParallax</code> via the 
+<code>compute()</code> method. One can either pass the parameters <span class="arithmatex">\(\pi_{E,E}\)</span> and <span class="arithmatex">\(\pi_{E,N}\)</span> or 
+the angle <span class="arithmatex">\(\psi\)</span> and the magnitude <span class="arithmatex">\(\pi_E\)</span>. The vector 
+<span class="arithmatex">\((\delta\zeta_e(t), \delta\zeta_n(t))^\intercal\)</span> is precomputed on a grid in time 
+which spans the time interval of the light curve with a timestep of 1 day. It is then
+interpolated at arbitrary times when the <code>compute()</code> method is called. This operation
+is very cheap.</p>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="caustics.trajectory" class="doc doc-heading">
+          <code>caustics.trajectory</code>
+
+
+<a href="#caustics.trajectory" class="headerlink" title="Permanent link">¤</a></h2>
+
+  <div class="doc doc-contents first">
+
+  
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="caustics.trajectory.AnnualParallaxTrajectory" class="doc doc-heading">
+        <code>AnnualParallaxTrajectory</code>
+
+
+<a href="#caustics.trajectory.AnnualParallaxTrajectory" class="headerlink" title="Permanent link">¤</a></h3>
+
+
+  <div class="doc doc-contents ">
+
+  
+      <p>Compute the trajectory of the source star on the plane of the sky while 
+taking into account the annual parallax effect -- the fact that the apparent
+position of the source star on the plane of the sky is shifted by the 
+projected position vector of the Sun relative to the Earth.</p>
+<p>Example usage:
+<div class="highlight"><pre><span></span><code><span class="n">trajectory</span> <span class="o">=</span> <span class="n">AnnualParallaxTrajectory</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">coords</span><span class="p">)</span>
+<span class="n">w_points</span> <span class="o">=</span> <span class="n">trajectory</span><span class="o">.</span><span class="n">compute</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">t0</span><span class="o">=</span><span class="n">t0</span><span class="p">,</span> <span class="n">tE</span><span class="o">=</span><span class="n">tE</span><span class="p">,</span> <span class="n">u0</span><span class="o">=</span><span class="n">u0</span><span class="p">,</span> <span class="n">piEE</span><span class="o">=</span><span class="n">piEE</span><span class="p">,</span> <span class="n">piEN</span><span class="o">=</span><span class="n">piEN</span><span class="p">)</span>
+</code></pre></div></p>
+
+
+
+  
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="caustics.trajectory.AnnualParallaxTrajectory.t" class="doc doc-heading">
+<code class="highlight language-python"><span class="n">t</span> <span class="o">=</span> <span class="n">t</span></code>
+  
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#caustics.trajectory.AnnualParallaxTrajectory.t" class="headerlink" title="Permanent link">¤</a></h4>
+
+
+  <div class="doc doc-contents ">
+  </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="caustics.trajectory.AnnualParallaxTrajectory.t_jpl" class="doc doc-heading">
+<code class="highlight language-python"><span class="n">t_jpl</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">t</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">t</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span></code>
+  
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#caustics.trajectory.AnnualParallaxTrajectory.t_jpl" class="headerlink" title="Permanent link">¤</a></h4>
+
+
+  <div class="doc doc-contents ">
+  </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="caustics.trajectory.AnnualParallaxTrajectory.coords" class="doc doc-heading">
+<code class="highlight language-python"><span class="n">coords</span> <span class="o">=</span> <span class="n">coords</span></code>
+  
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#caustics.trajectory.AnnualParallaxTrajectory.coords" class="headerlink" title="Permanent link">¤</a></h4>
+
+
+  <div class="doc doc-contents ">
+  </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="caustics.trajectory.AnnualParallaxTrajectory.s_e" class="doc doc-heading">
+<code class="highlight language-python"><span class="n">s_e</span> <span class="o">=</span> <span class="kc">None</span></code>
+  
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#caustics.trajectory.AnnualParallaxTrajectory.s_e" class="headerlink" title="Permanent link">¤</a></h4>
+
+
+  <div class="doc doc-contents ">
+  </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="caustics.trajectory.AnnualParallaxTrajectory.s_n" class="doc doc-heading">
+<code class="highlight language-python"><span class="n">s_n</span> <span class="o">=</span> <span class="kc">None</span></code>
+  
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#caustics.trajectory.AnnualParallaxTrajectory.s_n" class="headerlink" title="Permanent link">¤</a></h4>
+
+
+  <div class="doc doc-contents ">
+  </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="caustics.trajectory.AnnualParallaxTrajectory.s_e_dot" class="doc doc-heading">
+<code class="highlight language-python"><span class="n">s_e_dot</span> <span class="o">=</span> <span class="kc">None</span></code>
+  
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#caustics.trajectory.AnnualParallaxTrajectory.s_e_dot" class="headerlink" title="Permanent link">¤</a></h4>
+
+
+  <div class="doc doc-contents ">
+  </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="caustics.trajectory.AnnualParallaxTrajectory.s_n_dot" class="doc doc-heading">
+<code class="highlight language-python"><span class="n">s_n_dot</span> <span class="o">=</span> <span class="kc">None</span></code>
+  
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#caustics.trajectory.AnnualParallaxTrajectory.s_n_dot" class="headerlink" title="Permanent link">¤</a></h4>
+
+
+  <div class="doc doc-contents ">
+  </div>
+
+</div>
+
+
+
+<div class="doc doc-object doc-function">
+
+
+
+<h4 id="caustics.trajectory.AnnualParallaxTrajectory.__init__" class="doc doc-heading">
+<code class="highlight language-python"><span class="fm">__init__</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">coords</span><span class="p">)</span></code>
+
+<a href="#caustics.trajectory.AnnualParallaxTrajectory.__init__" class="headerlink" title="Permanent link">¤</a></h4>
+
+
+  <div class="doc doc-contents ">
+  
+
+  <p><strong>Parameters:</strong></p>
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+        <th>Default</th>
+      </tr>
+    </thead>
+    <tbody>
+        <tr>
+          <td><code>t</code></td>
+          <td>
+                <code>ndarray</code>
+          </td>
+          <td><p>Array containing the observation times in HJD format.</p></td>
+          <td>
+              <em>required</em>
+          </td>
+        </tr>
+        <tr>
+          <td><code>coords</code></td>
+          <td>
+                <code>astropy.<span title="astropy.coordinates">coordinates</span>.<span title="astropy.coordinates.SkyCoord">SkyCoord</span></code>
+          </td>
+          <td><p>The coordinates of the source
+star.</p></td>
+          <td>
+              <em>required</em>
+          </td>
+        </tr>
+    </tbody>
+  </table>
+
+  </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+
+<h4 id="caustics.trajectory.AnnualParallaxTrajectory.compute" class="doc doc-heading">
+<code class="highlight language-python"><span class="n">compute</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">parametrization</span> <span class="o">=</span> <span class="s1">&#39;cartesian&#39;</span><span class="p">,</span> <span class="o">**</span><span class="n">params</span><span class="p">)</span></code>
+
+<a href="#caustics.trajectory.AnnualParallaxTrajectory.compute" class="headerlink" title="Permanent link">¤</a></h4>
+
+
+  <div class="doc doc-contents ">
+  
+      <p>Compute the trajectory of the source star in a Geocentric Equatorial 
+coordinate system centered on the source star.</p>
+
+  <p><strong>Parameters:</strong></p>
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+        <th>Default</th>
+      </tr>
+    </thead>
+    <tbody>
+        <tr>
+          <td><code>t</code></td>
+          <td>
+                <code>array_like</code>
+          </td>
+          <td><p>An array of times at which to evaluate the trajectory.</p></td>
+          <td>
+              <em>required</em>
+          </td>
+        </tr>
+        <tr>
+          <td><code>parametrization</code></td>
+          <td>
+                <code>str</code>
+          </td>
+          <td><p>If "cartesian" <code>**params</code> should </p></td>
+          <td>
+                <code>&#39;cartesian&#39;</code>
+          </td>
+        </tr>
+    </tbody>
+  </table>
+
+  <p><strong>Returns:</strong></p>
+  <table>
+    <thead>
+      <tr>
+<th>Name</th>        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+        <tr>
+<td><code>array_like</code></td>          <td>
+          </td>
+          <td><p>A complex array of shape (len(t),) where the real part 
+is the East component and the imaginary part is the North
+component of the source trajectory in the source plane.</p></td>
+        </tr>
+    </tbody>
+  </table>
+
+  </div>
+
+</div>
+
+
+
+  </div>
+
+  </div>
+
+</div>
+
+
+
+
+  </div>
+
+  </div>
+
+</div>
+
+
+
+
+              
+            </article>
+            
+          </div>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+    <nav class="md-footer__inner md-grid" aria-label="Footer" >
+      
+        
+        <a href="../lightcurve/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Lightcurve" rel="prev">
+          <div class="md-footer__button md-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
+          </div>
+          <div class="md-footer__title">
+            <div class="md-ellipsis">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              Lightcurve
+            </div>
+          </div>
+        </a>
+      
+      
+        
+        <a href="../linalg/" class="md-footer__link md-footer__link--next" aria-label="Next: Linear algebra" rel="next">
+          <div class="md-footer__title">
+            <div class="md-ellipsis">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              Linear algebra
+            </div>
+          </div>
+          <div class="md-footer__button md-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11H4Z"/></svg>
+          </div>
+        </a>
+      
+    </nav>
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    <script id="__config" type="application/json">{"base": "../..", "features": ["navigation.sections", "toc.integrate", "header.autohide"], "search": "../../assets/javascripts/workers/search.ecf98df9.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.config.lang": "en", "search.config.pipeline": "trimmer, stopWordFilter", "search.config.separator": "[\\s\\-]+", "search.placeholder": "Search", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version.title": "Select version"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.9c69f0bc.min.js"></script>
+      
+        <script src="../../_static/mathjax.js"></script>
+      
+        <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>
