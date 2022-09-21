@@ -9,11 +9,11 @@ from jax import  jit
 def weighted_least_squares(y, y_err, M):
     C_inv = 1/y_err**2
     MTCinvM = M.T @ jnp.diag(C_inv) @ M
-    MTCinvM_inv = jnp.linalg.solve(MTCinvM, jnp.eye(2))
-    beta = MTCinvM_inv @ M.T @ jnp.diag(C_inv) @ y[:, None]
+    beta = jnp.linalg.solve(MTCinvM, M.T @ jnp.diag(C_inv) @ y[:, None])
     return beta
 
-@partial(jit, static_argnames=("dense_covariance"))
+
+@jit
 def marginalized_log_likelihood(
     M_list, fobs_list, C_inv_list,  Lam_sd=1e04, 
 ):
