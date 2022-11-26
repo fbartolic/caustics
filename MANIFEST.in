@@ -1,4 +1,0 @@
-include README.md LICENSE *.toml
-graft lib
-exclude .*
-prune .github
